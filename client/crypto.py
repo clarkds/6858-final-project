@@ -4,6 +4,12 @@ def hash(str):
 def det(plaintext):
     pass
 
+def create_sym_key():
+    pass # return tuple (size of key, key)
+
+def create_asym_key_pair():
+    pass # return tuple (size of pk, pk, size of sk, sk)
+
 def sym_enc(key, plaintext):
     pass # return tuple (size of cipher, cipher)
 
