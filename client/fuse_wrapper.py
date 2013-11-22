@@ -1,0 +1,1 @@
+# extend fuse Operations class
