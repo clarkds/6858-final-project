@@ -56,6 +56,7 @@ def asym_enc(key, plaintext):
 
 
 def asym_dec(key, ciphertext):
+<<<<<<< HEAD
     priv_key = RSA.importKey(key)
     cipher = PKCS1_OAEP.new(priv_key)
     plaintext = cipher.decrypt(ciphertext)
@@ -86,7 +87,19 @@ def generate_salt():
     return salt_ascii
 
 def generate_iv():
-    #generates a random 8 byte IV for each file.  need to store list of all iv's.
+    #generates a random 7 byte IV for each file.  need to store list of all iv's.
     _random_source = open("/dev/urandom", "rb")
     iv = _random_source.read(AES_IVS)
     return iv
+=======
+    pass
+    
+def clientEncrypt(password,plaintext):
+	pass #return cipher text, used to encrypt keys of user who logs into client
+	
+def clientDecrypt(password,ciphertext):
+	pass #return plain text, used to decrypt keys of user who logs into client
+
+def watermark():
+	pass #generate watermark
+>>>>>>> 3a7f3cb62817963644f37c0ab48bef47894db4ef
