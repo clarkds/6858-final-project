@@ -1,3 +1,18 @@
+"""
+Author: Clark Della Silva
+Contact: clarkds@mit.edu
+
+this module requires pyCrypto  -- apt-get install python-crypto
+
+This module handles the encryption functions for the file system.
+It implements the following:
+Deterministic Encryption using AES in ECB mode
+Symmetric Encyption using AES in CBC mode with a block size of 16, and a 16 byte random IV.  The key for AES-CBC is derived using PBKDF2.
+Asymmetric Encrption using PKCS1_OAEP with 2048bit RSA keys.
+Digital Signatures using  PKCS1_PSS using  2048bit RSA keys.
+    The Digital signature is used in place of an HMAC as the checksum stored in the file.  
+"""
+
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Hash import HMAC, SHA512
 from Crypto.PublicKey import RSA
@@ -86,7 +101,7 @@ def generate_salt():
     return salt_ascii
 
 def generate_iv():
-    #generates a random 7 byte IV for each file.  need to store list of all iv's.
+    #generates a random 8 byte IV for each file.  need to store list of all iv's.
     _random_source = open("/dev/urandom", "rb")
     iv = _random_source.read(AES_IVS)
     return iv
