@@ -92,6 +92,7 @@ def update_keyChain():
 	newKeyChain = {}
 	newKeyChain[user] = keyChain[user]
 	for perm in permissions:
+		# TODO: I did this loop completely wrong...
 		permJson = crypt.asym_dec(privateKey, perm)
 		(filepath, file_rk, file_wk) = json.loads(permJson)
 		newKeyChain[filepath] = (file_rk, file_wk)
