@@ -29,7 +29,9 @@ pad = lambda s: s + ((AES_BS - len(s) % AES_BS)) * chr(AES_BS - len(s) % AES_BS)
 unpad = lambda s: s[0:-ord(s[-1])]
 
 def hash(str):
-    pass
+    h = SHA512.new()
+    h.update(str)
+    return h.hexdigest()
 
 def det(plaintext):
     pad_text = pad(plaintext)
@@ -114,4 +116,4 @@ def clientDecrypt(password,ciphertext):
 	pass #return plain text, used to decrypt keys of user who logs into client
 
 def watermark():
-	pass #generate watermark
+	return "DEADBEEF" #generate watermark

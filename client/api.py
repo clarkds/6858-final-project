@@ -1,7 +1,9 @@
-import crypto
+import crypt
 import string #used to deal with pathnames
 import os #used to create files
 import pickle #used to easily store and load the lastInput dictionary
+import comm
+import json
 
 ################### global variables #######################################
 ################################################################################################
@@ -10,8 +12,9 @@ activeHandlers={} ## -> activeHandlers= dictionary with path:[handle,offset,read
 privateKey='' ##secretKey ->secretKey of user
 publicKey='' ##publicKey -> publicKey of user
 user='' ##user -> user who is using the client
+encUser = ''	## encUser -> encrypted user name
 lastInput={} ## ->the last change for each file ->dictionary with path:last update you gave the file, this must be updated everytime you write to a file
-currentPath='' #the current path varaiable the user is on
+currentPath='' #the current (un-encrypted) path varaiable the user is on
 
 ##################################################################################################
 ##################################################################################################
@@ -21,38 +24,48 @@ currentPath='' #the current path varaiable the user is on
 ################### helper functions created #######################################
 ################################################################################################
 
+# sanitizes the path (removes duplicate slashes, trailing slashes)
+# ex: sanitize_path('//a/b/c//d//') => ('/a/b/c/d', ['', 'a', 'b', 'c', 'd'])
+# For an absolute path, the path_parts[0]='' and path_parts[1]=user
+def sanitize_path(path):
+	path_parts = path.split('/')
+	path_parts = [path_parts[0]] + filter(None, path_parts[1:])	# remove empty strings from list
+	clean_path = string.join(path_parts,'/')
+	return (clean_path, path_parts)
 
-## returns encrypted path of the path 
+# returns encrypted path of the path
+# path must be absolute
 def encrypted_path(path):
-	oldpath=path.split('/')
-	newpath = path.split('/')
-	newpath[0]=crypto.det(newpath[0])
-	for part in range(1,len(newpath)):
+	assert(path.startswith('/'))
+	(path,oldpath) = sanitize_path(path)	
+	newpath = oldpath[:]
+	newpath[1]=crypt.det(newpath[1])
+	for part in range(2,len(newpath)):
 		previousPath=string.join(oldpath[0:part+1],'/')
-		newpath[part]=crypto.sym_enc(keyChain[previousPath][0],newpath[part])
+		(cipher_len, ciphertext) =crypt.sym_enc(keyChain[previousPath][0],newpath[part])
+		newpath[part] = ciphertext
 	return string.join(newpath,'/')
-
 
 # finds the path for the logfile of the file
 def logfile_path(path):
-	newpath=path.split('/')
-	newpath[-1]='.log'+newpath[-1]
+	(clean_path, newpath)=sanitize_path(path)
+	newpath[-1]='.log_'+newpath[-1]
 	return string.join(newpath,'/')
 	
 #gets the path to the log file of the lowest directory path is in (if path is a directory, returns logfile of directory above path)
 def dir_log_path(path):
-	newpath = path.split('/')
-	newpath[-1]='.log'+newpath[-2]
+	(clean_path, newpath)=sanitize_path(path)
+	newpath[-1]='.log_'+newpath[-2]
 	return string.join(newpath,'/')
 
 def dir_checkSum_path(path): #includes checksum, edit number, and watermark, and public key for checksum ((if path is a directory, returns checkSum of directory above path)
-	newpath = path.split('/')
-	newpath[-1]='.checkSum'+newpath[-2]
+	(clean_path, newpath)=sanitize_path(path)
+	newpath[-1]='.checkSum_'+newpath[-2]
 	return string.join(newpath,'/')
 
 #gets path to directory (if path is a directory, returns path of directory above path)
 def dir_path(path):
-	newpath = path.split('/')
+	(clean_path, newpath)=sanitize_path(path)
 	return string.join(newpath[:-1],'/')
 
 ##################################################################################################
@@ -67,9 +80,21 @@ def dir_path(path):
 #checks watermark, and if you have write acces can check last update, returns True if it checks out
 def check_received_file(filename,logfilename=None):
 	pass
-	
+
+# get all our file keys from the server
 def update_keyChain():
-	pass
+	reply = client_send({
+		"ENC_USER": encUser,
+		"OP": "getPermissions"})
+	permissions = reply["permissions"]
+	
+	newKeyChain = {}
+	newKeyChain[user] = keyChain[user]
+	for perm in permissions:
+		permJson = asym_dec(privateKey, perm)
+		(filepath, file_rk, file_wk) = json.loads(permJson)
+		newKeyChain[filepath] = (file_rk, file_wk)
+	keyChain = newKeyChain
 	
 #returns temporary filename of downloaded ftp file
 def receive_file(encryptedpath):
@@ -118,25 +143,26 @@ def logout():
 
 ### logs in the user and updates the global variables
 def login(username,password):
-	encryptUserName=det(username)
+	encryptUserName=crypt.det(username)
 	if os.path.exists('users/'+encUserName)==False:
 		success = False
 	else:
 		secrets=open('users/'+encUserName+'/secret','r')
 		cipher=secrets.read()
 		secrets.close()
-		waterMark=crypto.watermark()
-		plaintext=clientDecrypt(password,cipher)
+		waterMark=crypt.watermark()
+		plaintext=crypt.clientDecrypt(password,cipher)
 		if waterMark==plaintext.split('\n')[0]:
 			privateKey=plaintext.split('\n')[2]
 			publicKey=plaintext.split('\n')[1]
 			user=username
-			keyChain[user]=crypto.det(user)
+			encUser = encUserName
+			keyChain[user]=crypt.det(user)
 			update_keyChain()
 			savedLogs=open('users/'+encUserName+'/savedLogs','w')
 			lastInput=pickle.load(savedLogs)
 			savedLogs.close()
-			currentPath=crypto.det(user)
+			currentPath="/" + user
 			success=True
 		else:
 			success = False
@@ -146,23 +172,22 @@ def login(username,password):
 
 ### creates a user of the system for the client, logins them in, then 
 def create_user(username,password):
-	encUserName=crypto.det(username)
-	asymKeys=crypto.create_asym_key_pair()
-	privKey=asymKeys[1]
-	pubKey=asymKeys[0]
+	encUserName=crypt.det(username)
+	(len_pk, pk, len_sk, sk) = crypt.create_asym_key_pair()
+	privKey=sk
+	pubKey=pk
 	check = server_create_user(encUserName)
 	if os.path.exists('users/'+encUserName)==False and check==True:
 		os.mkdir('users/'+encUserName)
 		secret=open('users/'+encUserName+'/secret','w')
-		waterMark=crypto.watermark()
+		waterMark=crypt.watermark()
 		secret.write(crypt.clientEncrypt(password,waterMark+'\n'+pubKey+'\n'+privKey))
 		secret.close()
 		savedLogs=open('users/'+encUserName+'/savedLogs','w')
 		lastInput['None']="none"
 		pickle.dump(lastInput,savedLogs)
 		savedLogs.close()
-		login(username,password)
-		success=True
+		success=login(username,password)
 	else:
 		success=False
 	return success
@@ -178,8 +203,8 @@ def fopen(path, way):
 		#if user is creating a new file
 		if dir_log_path(path) in keyChain and path not in keyChain:
 			fileAsymKeys=crytpto.create_asym_key_pair()
-			fileSymKey=crypto.create_sym_key()
-			difFileSymKey=crypto.create_sym_key()
+			fileSymKey=crypt.create_sym_key()
+			difFileSymKey=crypt.create_sym_key()
 			keyChain[path]=[fileSymKey,fileAsymKeys]
 			keyChain[logfile_path(path)]=[difFileSymKey,fielAsymKeys]
 			activeHandlers[path]=['',0,'w']
