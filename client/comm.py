@@ -57,7 +57,7 @@ def sample_server():
 		(msg_size, msg_obj) = readMsg(conn)
 		print "Incoming msg_size: ", msg_size
 		print "Incoming msg: ", msg_obj
-		conn.send(msgFromObj({"OP":"ack", "STATUS":0}))
+		conn.send(msgFromObj({"OP":"reply", "STATUS":0}))
 		conn.close()
 	
 if __name__ == '__main__':

@@ -85,24 +85,38 @@ def check_received_file(filename,logfilename=None):
 def update_keyChain():
 	reply = client_send({
 		"ENC_USER": encUser,
-		"OP": "getPermissions"})
+		"OP": "getPermissions"
+	})
 	permissions = reply["permissions"]
 	
 	newKeyChain = {}
 	newKeyChain[user] = keyChain[user]
 	for perm in permissions:
-		permJson = asym_dec(privateKey, perm)
+		permJson = crypt.asym_dec(privateKey, perm)
 		(filepath, file_rk, file_wk) = json.loads(permJson)
 		newKeyChain[filepath] = (file_rk, file_wk)
 	keyChain = newKeyChain
 	
 #returns temporary filename of downloaded ftp file
 def receive_file(encryptedpath):
-	pass
+	reply = client_send({
+		"ENC_USER": encUser,
+		"OP": "download",
+		"file": encryptedpath
+	})
+	filedata = reply["filedata"]
+	
+	print "JOE PUT CODE HERE"
+	#Joe TODO: save filedata to a tmp file
+	# and return the name of the tmp file
 
 #tells server to create a directory for detuser, returns True if succeeds
 def server_create_user(detUser):
-	pass
+	reply = client_send({
+		"ENC_USER": encUser,
+		"OP": "createUser"
+	})
+	return reply["status"] == 0
 
 #clears global variables and logs user out
 def logout():
