@@ -21,3 +21,12 @@ def asym_enc(key, plaintext):
 
 def asym_dec(key, ciphertext):
     pass
+    
+def clientEncrypt(password,plaintext):
+	pass #return cipher text, used to encrypt keys of user who logs into client
+	
+def clientDecrypt(password,ciphertext):
+	pass #return plain text, used to decrypt keys of user who logs into client
+
+def watermark():
+	pass #generate watermark
