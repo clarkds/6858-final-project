@@ -2,8 +2,8 @@ import crypt
 import string #used to deal with pathnames
 import os #used to create files
 import pickle #used to easily store and load the lastInput dictionary
-import comm
 import json
+import comm
 
 ################### global variables #######################################
 ################################################################################################
