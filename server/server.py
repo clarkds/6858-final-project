@@ -27,20 +27,33 @@ def server_send(conn, msgObj):
 def clientthread(conn):
 	while True:
 		(msg_size, msg_obj) = readMsg(conn)
+		print "Incoming msg: ", msg_obj
 		op = msg_obj['OP']
 		username = msg_obj['ENC_USER']
 		response = {'OP':'ack', 'STATUS':0}
-		if op == 'getPermissions':
-			db = permissions_setup()
-			permissions = db.query(Permissions).get(username)
-			response['permissions'] = permissions.permissions
-
+		if op == 'createUser':
+			# Create a directory for the new user
+			if os.path.exists('users/' + username):
+				response['STATUS'] = 1
+			else:
+				os.mkdir('users/' + username) 
+				# Create an entry in the permissions table
+				# Create an entry in the public key table
+				addUserToDatabases(username)
+				print "ADDED USER TO DB"
+		elif op == 'getPermissions':
+			response['TARGET'] = msg_obj['TARGET']
+			response['permissions'] = getPermissions(msg_obj['TARGET'])
+		elif op == 'addPermission':
+			addPermission(msg_obj['TARGET'], msg_obj['PERMISSION'])
+		elif op == 'getPublicKey':
+			response['TARGET'] = msg_obj['TARGET']
+			response['KEY'] = getPublicKey(msg_obj['TARGET'])
+		elif op == 'setPublicKey':
+			setPublicKey(msg_obj['TARGET'], msg_obj['KEY'])
 		elif op =='download':
 			#TODO
 			response['filedata'] = 'TODO'
-		elif op =='createUser':
-		  # TODO 
-			response['STATUS'] = 0
 		else:
 			server_send(conn, {'OP':'ack', 'STATUS':1}) 
 		server_send(conn, response)	

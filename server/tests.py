@@ -30,5 +30,12 @@ def client_setup():
 		print client_send(msg)
 
 def create_user_test():
-
-client_setup()
+	s.connect((SERVER_IP, SERVER_PORT))
+	print client_send({"ENC_USER":"asaj", "OP":"login"})
+	print client_send({"ENC_USER":"asaj", "OP":"createUser"})
+	print client_send({"ENC_USER":"asaj", "OP":"addPermission", "TARGET":"asaj", "PERMISSION":"12345"})
+	print client_send({"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})
+	print client_send({"ENC_USER":"asaj", "OP":"setPublicKey", "TARGET":"asaj", "KEY":"54321"})
+	print client_send({"ENC_USER":"asaj", "OP":"getPublicKey", "TARGET":"asaj"})
+	s.close()
+create_user_test()

@@ -5,6 +5,17 @@ import os
 
 PublicKeyBase = declarative_base()
 PermissionsBase = declarative_base()
+def dbsetup(name, base):
+	thisdir = os.path.dirname(os.path.abspath(__file__))
+	dbdir   = os.path.join(thisdir, "db", name)
+	if not os.path.exists(dbdir):
+		os.makedirs(dbdir)
+
+	dbfile  = os.path.join(dbdir, "%s.db" % name)
+	engine  = create_engine('sqlite:///%s' % dbfile)
+	base.metadata.create_all(engine)
+	session = sessionmaker(bind=engine)
+	return session()
 
 class PublicKey(PublicKeyBase):
 	__tablename__ = "publickey"
@@ -22,6 +33,43 @@ def publickey_setup():
 def permissions_setup():
 	return dbsetup("permissions", PermissionsBase)
 
+def addPermission(username, permission):
+	# TODO: Sanitize permission
+	db = permissions_setup()
+	user = db.query(Permissions).get(username)
+	user.permissions = user.permissions + '/' + permission
+	db.commit()
+
+def getPermissions(username):
+	db = permissions_setup()
+	user = db.query(Permissions).get(username)
+	return user.permissions
+
+def getPublicKey(username):
+	db = publickey_setup()
+	user = db.query(PublicKey).get(username)
+	return user.key
+
+def setPublicKey(username, publickey):
+	db = publickey_setup()
+	user = db.query(PublicKey).get(username)
+	user.publickey = publickey
+	db.commit()
+
+def addUserToDatabases(username):
+	user = PublicKey()
+	user.username = username
+	user.publickey = ""
+	db = publickey_setup()
+	db.add(user)
+	db.commit()
+
+	user = Permissions()
+	user.username = username
+	user.permissions = ""
+	db = permissions_setup()
+	db.add(user)
+	db.commit()
 
 import sys
 if __name__ == "__main__":
