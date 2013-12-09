@@ -14,6 +14,7 @@ PADDED_HEX_STR_SIZE = 20
 
 s0 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 # sends a msg_obj to the server and reads a msg_obj in reply
 def client_send(s, msg_obj):
@@ -45,11 +46,16 @@ def create_user_test():
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"logoutUser"})["STATUS"] == 0
 	s0.close()
 	s1.connect((SERVER_IP, SERVER_PORT))
+	s2.connect((SERVER_IP, SERVER_PORT))
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"penis"})["STATUS"] == 0
+	assert client_send(s2, {"ENC_USER":"jasa", "OP":"createUser", "PASSWORD":"penis", "KEY":"88888"})["STATUS"] == 0
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0][2] == "22222"
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][1][2] == "11111"
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"getPublicKey", "TARGET":"asaj"})["KEY"] == "55555"
+	assert client_send(s1, {"ENC_USER":"jasa", "OP":"logoutUser"})["STATUS"] == 1
+	assert client_send(s2, {"ENC_USER":"asaj", "OP":"logoutUser"})["STATUS"] == 1
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"logoutUser"})["STATUS"] == 0
+	assert client_send(s2, {"ENC_USER":"jasa", "OP":"logoutUser"})["STATUS"] == 0
 	s1.close()
 	
 create_user_test()

@@ -32,7 +32,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 			response = {'OP':'ack', 'STATUS':0}
 			active_users_lock.acquire()
 			try:
-				if not active_users[username][1] == self.client_address:
+				if username not in active_users.keys() or not active_users[username][1] == self.client_address:
 					response['ERROR'] = "Username and IP don't match"
 					response['STATUS'] = 1
 					op = 'skipSwitch'
