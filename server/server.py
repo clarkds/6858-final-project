@@ -23,6 +23,28 @@ MAX_ACTIVE_USERS = 255
 active_users = {}
 active_users_lock = threading.Lock()
 
+def write_file_contents(path, content):
+	f = open(path, 'w')
+	f.write(content)
+	f.close()
+
+def read_file_contents(path):
+	f = open(path, 'r')
+	contents = f.read()
+	f.close()
+	return contents
+
+def get_parent_directory(path):
+	sub_path = path.split('/')
+	sub_path = sub_path[0:len(sub_path) - 1]
+	sub_path = "/".join(sub_path)
+	return sub_path
+
+def get_logfile_path(path):
+	sub_path = get_parent_directory(path)
+	log_path = sub_path + '/.log.' + path.split('/')[-1]
+	return log_path
+	
 class MyTCPHandler(SocketServer.BaseRequestHandler):
 	def handle(self):
 		logged_in = True
@@ -57,89 +79,140 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['ERROR'] = "User does not exist"
 					response['STATUS'] = 1
 	
-			elif op == 'addPermission':
-				if user_exists(msg_obj['TARGET']):
-					add_permission(username, msg_obj['TARGET'], msg_obj['PERMISSION'])
-				else:
-					response['ERROR'] = "User does not exist"
-					response['STATUS'] = 1
-	
+			elif op == 'addPermissions':
+				for (target, perm) in msg_obj['USERS_AND_PERMS']:
+					if user_exists(target):
+						add_permission(username, target, perm)
+					else:
+						response['ERROR'] = "User " + target + "does not exist"
+						response['STATUS'] = 1
+
+			elif op == 'deletePermissions':
+				for (target, perm) in msg_obj['USERS_AND_PERMS']:
+					if user_exists(target):
+						remove_permission(username, target, perm)
+					else:
+						response['ERROR'] = "User " + target + "does not exist"
+						response['STATUS'] = 1
+
 			elif op == 'getPublicKey':
-				response['TARGET'] = msg_obj['TARGET']
+				target = msg_obj['TARGET']
+				response['TARGET'] = target
 				if user_exists(msg_obj['TARGET']):
 					response['KEY'] = get_public_key(msg_obj['TARGET'])
 				else:
-					response['ERROR'] = "User does not exist"
+					response['ERROR'] = "User " + target + "does not exist"
 					response['STATUS'] = 1
+
+			elif op == 'getAllPublicKeys':
+				response['USERS_AND_KEYS'] = get_all_public_keys()
 	
 			elif op == 'setPublicKey':
 				set_public_key(username, msg_obj['KEY'])
 	
 			elif op =='downloadFile':
-				#TODO
-				pass
+				path = ('users' + msg_obj['PATH'])
+				if os.path.exists(path) and os.path.isfile(path):
+					response['DATA'] = read_file_contents(path)
+				else:
+					response['ERROR'] = "Folder " + path + " does not exist"
+					response['STATUS'] = 1
+
 	
 			elif op =='downloadDir':
 				#TODO
 				pass
 	
 			elif op =='createFile':
-				#TODO
-				path = ('users/' + username + '/' + msg_obj['PATH'])
+				path = ('users' + msg_obj['PATH'])
+				parent_dir = get_parent_directory(path)
+				log_file = get_logfile_path(parent_dir)
 				if os.path.exists(path):
-					response['ERROR'] = "File to delete does not exist"
+					response['ERROR'] = "Folder or file " + path + " already exists"
 					response['STATUS'] = 1
-				else:
+				elif not os.path.exists(parent_dir):
+					response['ERROR'] = "Parent dir " + parent_dir + " does not exist, cannot create " + path
+					response['STATUS'] = 1
+				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
 					open(path, 'a').close()
 					os.utime(path, None)
-					#TODO Write folder difflog	
+					write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
+					write_file_contents(get_logfile_path(path), msg_obj['LOG_DATA'])
+					add_write_key(path, msg_obj['SECRET'])
+
 			elif op =='writeFile':
-				#TODO
-				pass
-	
-			elif op =='deleteFile':
-				path = ('users/' + username + '/' + msg_obj['PATH'])
-				if os.path.exists(path) and os.path.isfile:
-					os.remove(path)
-					#TODO Write folder difflog
+				path = ('users' + msg_obj['PATH'])
+				log_file = get_logfile_path(path)
+				if not os.path.exists(path) and os.path.isfile(path):
+					response['ERROR'] = "Folder or file " + path + " does not exist"
+					response['STATUS'] = 1
+				elif check_write_key(path, msg_obj['SECRET']):
+					write_file_contents(log_file, msg_obj['LOG_DATA'])
+					write_file_contents(path, msg_obj['FILE_DATA'])
 				else:
-					response['ERROR'] = "File to delete does not exist"
+					response['ERROR'] = "Incorrect secret for " + path
+					response['STATUS'] = 1
+
+			elif op =='deleteFile':
+				path = ('users' + msg_obj['PATH'])
+				parent_dir = get_parent_directory(path)
+				log_file = get_logfile_path(parent_dir)
+				if not (os.path.exists(path) and os.path.isfile(path)):
+					response['ERROR'] = "File " + path + " to delete does not exist"
 					response['STATUS'] = 1	
+				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
+					write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
+					os.remove(path)
+					os.remove(get_logfile_path(path))
+				else:
+					response['ERROR'] = "Incorrect secret for " + parent_dir
+					response['STATUS'] = 1
 
 			elif op =='mkdir':
-					#TODO Write folder difflog
-				path = ('users/' + username + '/' + msg_obj['PATH'])
-				sub_path = path.split('/')
-				sub_path = sub_path[0:len(sub_path) - 1]
-				sub_path = "/".join(sub_path)
+				path = ('users' + msg_obj['PATH'])
+				parent_dir = get_parent_directory(path)
+				log_file = get_logfile_path(parent_dir)
 				if os.path.exists(path):
-					response['ERROR'] = "Folder " + path + " already exists"
+					response['ERROR'] = "Folder or file " + path + " already exists"
 					response['STATUS'] = 1
-				elif not os.path.exists(sub_path):
-					response['ERROR'] = "Sub path " + sub_path + " does not exist"
+				elif not os.path.exists(parent_dir):
+					response['ERROR'] = "Sub path " + parent_dir + " does not exist, cannot create " + path
 					response['STATUS'] = 1
-				else:	
+				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
+					write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
+					write_file_contents(get_logfile_path(path), msg_obj['LOG_DATA'])
+					add_write_key(path, msg_obj['SECRET'])
 					os.mkdir(path)
+				else:
+					response['ERROR'] = "Incorrect secret for " + parent_dir
+					response['STATUS'] = 1
+
 	
 			elif op =='rmdir':
-				path = ('users/' + username + '/' + msg_obj['PATH'])
-				if os.path.exists(path) and os.path.isdir:
+				path = ('users' + msg_obj['PATH'])
+				parent_dir = get_parent_directory(path)
+				log_file = get_logfile_path(parent_dir)
+				if not (os.path.exists(path) and os.path.isdir(path)):
+					response['ERROR'] = "Folder to delete does not exist"
+					response['STATUS'] = 1
+				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
 					if len(os.listdir(path)) == 0:
 						os.rmdir(path)
-					#TODO Write folder difflog
+						os.remove(get_logfile_path(path))
+						write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
 					else:
 						response['ERROR'] = "Folder to delete not empty"
 						response['STATUS'] = 1
 				else:
-					response['ERROR'] = "Folder to delete does not exist"
+					response['ERROR'] = "Incorrect secret for " + parent_dir
 					response['STATUS'] = 1
 	
 			elif op =='ls':
-				path = ('users/' + username + '/' + msg_obj['PATH'])
+				path = ('users' + msg_obj['PATH'])
 				if os.path.exists(path) and os.path.isdir:
 					gen = os.walk(path)
 					(root, dirs, files) = gen.next()
-					response["FILES"] = files
+					response["FILES"] = [f for f in files if not f.startswith('.log')]
 					response["FOLDERS"] = dirs
 				else:
 					response['ERROR'] = "Folder to ls does not exist"
@@ -150,6 +223,9 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 	
 			else:
 				self.request.send(msgFromObj({'OP':'ack', 'STATUS':1}))
+				print "Response: " + msgFromObj({'OP':'ack', 'STATUS':1})
+				print op
+				return
 			self.request.send(msgFromObj(response))
 			print "Response: " + msgFromObj(response)	
 
@@ -178,17 +254,21 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 					password = msg_obj['PASSWORD']
 					public_key = msg_obj['KEY']
 					add_user_to_databases(username, password, public_key)	
+					add_write_key("users/" + username, msg_obj["PARENT_SECRET"])
 					active_users[username] = (True, client_address)
 					verified = True
 
 			elif op =='loginUser':
+				#TODO: logging in twice should log the old user out?
 				if (check_password(username, msg_obj['PASSWORD'])) and active_users[username][0] == False:
 					active_users[username] = (True, client_address)
 					verified = True
 				else:
 					response['ERROR'] = 'Username and password do not match'
 					response['STATUS'] = 1
-				
+			else:
+				response['ERROR'] = 'Must login first'
+				response['STATUS'] = 1	
 		finally:
 			active_users_lock.release()
 		request.send(msgFromObj(response))

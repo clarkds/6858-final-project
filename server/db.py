@@ -65,11 +65,12 @@ def writekey_setup():
 	return dbsetup("writekey", WriteKeyBase)
 
 def add_write_key(path, key):
+	print path
 	wkey = WriteKey()
 	wkey.path = path
 	wkey.key = key
 	db = writekey_setup()
-	db.add(key)
+	db.add(wkey)
 	db.commit()
 
 def update_write_key(path, key, new_key):
@@ -84,6 +85,7 @@ def update_write_key(path, key, new_key):
 		return False
 
 def check_write_key(path, key):
+	print path
 	db = writekey_setup()
 	existing_key = db.query(WriteKey).get(path)
 	if existing_key.key == key:
@@ -101,9 +103,9 @@ def add_permission(username, target, permission):
 	db.commit()
 
 def remove_permission(username, target, permission):
-	"""db = permission_setup()
-	permission = db.query(Permission).filter(Permission.username == username, Permission.target = target, Permission.permission = permission).delete()
-	db.commit()"""
+	db = permission_setup()
+	permission = db.query(Permission).filter(Permission.username == username, Permission.target == target, Permission.permission == permission).all()
+	db.commit()
 
 def get_permissions_shared_by(username):
 	db = permission_setup()
