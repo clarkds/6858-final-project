@@ -4,6 +4,10 @@ import os
 import pickle
 import crypt
 import json
+import difflog
+import sys
+
+
 client_working_dir='bobby/w'
 client_secrets={'time':'boby'}
 client_user='bbbb'
@@ -139,7 +143,7 @@ def parse_metadata_and_contents_for_file(data):
 		contents_len=int(contents_Hex,16)
 		bp+=10
 		contents=data[bp:bp+contents_len]
-		metadata={'checksum':checkSum,'CPK':CPK,'edit_number':edit_number}
+		metadata={'checksum':checkSum,'cpk':CPK,'edit_number':edit_number}
 		return (metadata,contents)
 	except:
 		return None
@@ -148,7 +152,7 @@ def test_parse_metadata_and_contents_for_file():
 	global WATERMARK
 	WATERMARK='HI there'
 	data='HI there0x00000002210x0000000120x0000000130x000000014'
-	if parse_metadata_and_contents_for_file(data)==({'checksum': '21', 'CPK': '2', 'edit_number': '3'}, '4'):
+	if parse_metadata_and_contents_for_file(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
 		return True
 	else:
 		return False
@@ -157,33 +161,59 @@ def test_parse_metadata_and_contents_for_file():
 print 'testing2'
 print test_parse_metadata_and_contents_for_file()
 
+def hex_string(data):
+	data_len= sys.getsizeof(data)
+	m=str(hex(data_len))
+	if len(m)<10:
+		newm=m.split('x')
+		newm[0]='0x'
+		while len(newm[1])<8:
+			newm[1]='0'+newm[1]
+	return string.join(newm,'')
 
+print 'hex_string'
+def test_hex_string():
+	w='what in the world is going on?'
+	if hex_string(w)!='0x00000043':
+		return False
+	return True
+print test_hex_string()
+			
 
 def parse_log(data):
-	#need to do this parse log
-	try:
+	#returns datalog object
+	if True:
 		global WATERMARK
 		bp=0
 		watermark=data[0:len(WATERMARK)]
+		if watermark!=WATERMARK:
+			return False
 		bp+=len(watermark)
 		contents_Hex=data[bp:bp+10]
-		contents_len=int(file_secret_Hex,16)
+		contents_len=int(contents_Hex,16)
 		bp+=10
-		contents=data[bp:bp+file_secret_len]
+
+		contents=data[bp:bp+contents_len]
 		diffObj=pickle.loads(contents)
 		###need to figure out how this works
-		return None
-	except:
-		return None
+		return diffObj
+	else:
+		return False
 	"""
 	return (secret_number, CSK, edit_list),  None on failure
 	"""
 	
 def test_parse_log():
-	data='HI there0x00000002210x0000000120x000000013'
-	print parse_log(data)
+	datapickle=pickle.dumps({'hi':'by'})
+	size=hex_string(datapickle)
+	data='HI there'+size+datapickle
+	if parse_log(data)!={'hi':'by'}:
+		return False
+	else:
+		return True
 
-#test_parse_log()
+print 'testlog'
+print test_parse_log()
 
 
 
@@ -215,7 +245,7 @@ def parse_metadata_for_dir(data):
 		contents_len=int(contents_Hex,16)
 		bp+=10
 		contents=data[bp:bp+contents_len]
-		metadata={'checksum':checkSum,'CPK':CPK,'edit_number':edit_number}
+		metadata={'checksum':checkSum,'cpk':CPK,'edit_number':edit_number}
 		return (metadata,contents)
 	except:
 		return None
@@ -223,7 +253,7 @@ def parse_metadata_for_dir(data):
 def test_parse_metadata_for_dir():
 	WATERMARK='HI there'
 	data='HI there0x00000002210x0000000120x0000000130x000000014'
-	if parse_metadata_for_dir(data)==({'checksum': '21', 'CPK': '2', 'edit_number': '3'}, '4'):
+	if parse_metadata_for_dir(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
 		return True
 	else:
 		return False
@@ -273,16 +303,86 @@ print test_fseek_ftell_fwrite_fread_fflush()
 
 
 
-def read_permissions_list(handle): ### for testing
-	m=[[('sally',crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa'))],[('tommy',crypt.create_sym_key('asdfjklasdfjkl', 'tommy', 'bbbbbbb'))]]
-	print m
-	return m
+def read_permissions_list(handle): ### returns permissons of a file by reading the log of the file
+
+	LOG_PATH_ON_DISK=4
+	ENC_PATH=1
+	global client_open_files
+	global client_keys
+	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff=crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]],diff.read())
+	diff.close()
+	diff_obj=parse_log(dec_diff)
+	if diff_obj==False:
+		return False
+	return diff_obj.perm
 	
 def encrypt_path(path):
 	return '/user1/a/b/boby'
 	
-def write_permissions_list(handle,new_permissions):
+def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key):
+	#takes handle of file, as well as new permissions, new filepassw, and new csk and overwrites log file with new things
+	LOG_PATH_ON_DISK=4
+	ENC_PATH=1
+	global client_open_files
+	global WATERMARK
+	global client_keys
+	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff=crypt.sym_dec(old_write_key,diff.read())
+	diff.close()
+	diff_obj=parse_log(dec_diff)
+	diff_obj.update_perms(new_permissions[0],new_permissions[1])
+	diff_obj.update_secrets(new_csk,new_filepassw)
+	pickled_diff=pickle.dumps(diff_obj)
+	
+	new_log=WATERMARK+hex_string(pickled_diff)+pickled_diff
+	new_log_file=crypt.sym_enc(client_keys[client_open_files[handle][ENC_PATH]],new_log)
+	
+	newdiff=open(client_open_files[handle][LOG_PATH_ON_DISK],'w')
+	newdiff.write(new_log_file)
+	newdiff.close()
 	return True
+
+
+def test_read_and_write_to_log():
+	global client_user
+	global client_passw
+	global client_loggedIn
+	global client_public_keys
+	global client_keys
+	client_keys={}
+	global client_encUser
+	global client_open_files
+
+	disk_place='testdifflog'
+	otherfile='testfile'
+	m=open(otherfile,'w+')
+	secrets=crypt.create_asym_key_pair()
+	writesecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
+	readsecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
+	client_keys[encrypt_path(otherfile)]=[readsecret,writesecret]
+	filepassw=crypt.hash('abcdefghijklmnop')
+	client_open_files[m]=[otherfile,encrypt_path(otherfile),{'checksum':secrets[-1],'edit_number':'hithere','cpk':secrets[1]},otherfile,disk_place,'boby','w+']
+	
+	#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
+	# metadata_map is for accessing each part of metadata
+	testdif=difflog.diff_log(secrets[-1],filepassw)
+	pickledtestdif=crypt.sym_enc(writesecret[-1],pickle.dumps(testdif))
+	testing=open(disk_place,'w')
+	testing.write(pickledtestdif)
+	testing.close()
+	print read_permissions_list(m)
+
+print 'logreadtest'
+test_read_and_write_to_log()
+	
+	
+	
+
+
+
+
+
 
 def api_client_send(msg):
 	print msg
