@@ -164,6 +164,11 @@ def send_to_server(msg_obj):
 
 def setup_socket():
 	global client_socket
+	if client_socket is not None:
+		try:
+			client_socket.close()
+		except:
+			pass
 	client_socket = msg.create_client_socket(SERVER_IP, SERVER_PORT, SOCKET_TIMEOUT)
 
 def test_send_to_server():
@@ -528,7 +533,7 @@ def test_api_create_user():
 	assert api_create_user("leo?", "123456") == False
 	assert api_create_user("leo", "123") == False
 	TESTING_ALLOW_RECREATE_USER = False
-	api_create_user("leo", "123456")
+	assert api_create_user("leo", "123456")
 	TESTING_ALLOW_RECREATE_USER = True
 
 def api_login(user, passw, secretsFile=None):	# LEO
