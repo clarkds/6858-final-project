@@ -8,10 +8,15 @@ class diff_log(list):
     """ class for the entire diff log of a file
     """
     
-    def __init__(self):
+    def __init__(self,csk,filepassw):
         ## stores the file name, where it was created, owner of the file
         ## stores the diff_log of the file as an instance array of diff_obj
         list.__init__(self)
+        self.csk=csk
+        self.filepassw=filepassw
+        self.perm=[]
+        self.perm.append([])
+        self.perm.append([])
         
     def _generate_patch(self, orig_file, mod_file):
         #creates the patch for entry into the diff log.
@@ -22,12 +27,21 @@ class diff_log(list):
         patches = dmp.patch_make(orig_file, diffs)
         text_patches = dmp.patch_toText(patches)
         return text_patches
+    
+    def update_secrets(csk,filepassw):
+    	self.csk=csk
+    	self.filepassw=filepassw
+    	
+    def update_perm(self,readperm,writeperm):
+    	self.perm[0]=readperm
+    	self.perm[1]=writeperm
         
     def create_diff(self, user, user_SK, orig_file, mod_file = None, comments = None):
         new_diff = diff_obj()
         new_diff.user = user
         new_diff.edit_number = self.len()
-        new_diff.comments = comments if comments != None
+        if comments != None:
+        	new_diff.comments = comments
         if mod_file == None:
             new_diff.patch = self._generate_patch('', orig_file)
         else:
@@ -37,7 +51,9 @@ class diff_log(list):
         new_diff.freeze()
         self.append(new_diff)
         
-    def rebuild_file(self, index_number =  (self.len()-1)):
+    def rebuild_file(self, index_number =  None):
+    	if index_number ==None:
+    		index_number=self.len()-1
         file = ''
         dmp = diff.diff_match_patch()
         dmp.Diff_Timeout = 0   #no timeout
@@ -73,8 +89,10 @@ diff structure:
         self.patch = None
         
     def __str__(self):
-        return "{self.user} edited the file on {self.timestamp}
+        return 'hithere'
+        
+        '''"{self.user} edited the file on {self.timestamp}
            it was edit number: {self.edit_number}
-           comments: {self.comments}".format(self=self)
+           comments: {self.comments}".format(self=self)'''
            
     
