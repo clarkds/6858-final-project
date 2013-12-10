@@ -38,7 +38,13 @@ def strToBytes(string):
 def hash(str):
     h = SHA512.new()
     h.update(str)
-    return bytesToStr(h.hexdigest())
+    ret = bytesToStr(h.hexdigest())
+    #TODO: make this more secure by using a hash function that generates shorter hashes
+    # instead of just substring-ing the hash
+    if len(ret) > 64:
+        return ret[0:64]
+    else:
+        return ret
 
 def det(plaintext):
     pad_text = pad(plaintext)

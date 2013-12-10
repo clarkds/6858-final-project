@@ -92,16 +92,6 @@ def strToBytes(string):
 
 # returns a msg obj on success, None on error
 def send_to_server(msg_obj):
-	"""
-	try {
-		resp = client_send()
-	} catch Exception {
-		resp = None
-	}
-	if resp == None:
-		logout()
-	return resp
-	"""
 	global client_socket, client_err_msgs
 	try:
 		resp = msg.client_send(client_socket, msg_obj)
@@ -338,7 +328,7 @@ def parse_metadata_and_contents_for_file(data):
 		contents_len=int(contents_Hex,16)
 		bp+=10
 		contents=data[bp:bp+contents_len]
-		metadata={'checksum':checkSum,'CPK':CPK,'edit_number':edit_number}
+		metadata={'checksum':checkSum,'cpk':CPK,'edit_number':edit_number}
 		return (metadata,contents)
 	except:
 		return None
@@ -347,7 +337,7 @@ def test_parse_metadata_and_contents_for_file():
 	global WATERMARK
 	WATERMARK='HI there'
 	data='HI there0x00000002210x0000000120x0000000130x000000014'
-	if parse_metadata_and_contents_for_file(data)==({'checksum': '21', 'CPK': '2', 'edit_number': '3'}, '4'):
+	if parse_metadata_and_contents_for_file(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
 		return True
 	else:
 		return False
@@ -385,7 +375,7 @@ def parse_metadata_for_dir(data):
 		contents_len=int(contents_Hex,16)
 		bp+=10
 		contents=data[bp:bp+contents_len]
-		metadata={'checksum':checkSum,'CPK':CPK,'edit_number':edit_number}
+		metadata={'checksum':checkSum,'cpk':CPK,'edit_number':edit_number}
 		return (metadata,contents)
 	except:
 		return None
@@ -393,7 +383,7 @@ def parse_metadata_for_dir(data):
 def test_parse_metadata_for_dir():
 	WATERMARK='HI there'
 	data='HI there0x00000002210x0000000120x0000000130x000000014'
-	if parse_metadata_for_dir(data)==({'checksum': '21', 'CPK': '2', 'edit_number': '3'}, '4'):
+	if parse_metadata_for_dir(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
 		return True
 	else:
 		return False
@@ -438,22 +428,25 @@ def test_path_parent():
 	assert path_parent("/a/b/c") == ('/a/b', 'c')
 
 # contents is a string
-def verify_checksum(metadata_map, contents):	# Leo
-	"""
-	return asym_dec(metadata_map["cpk"], metadatamap["checksum"]) == hash(contents|metadata_map["cpk"]|metadata_map[""]|metadata_map["edit_number"])
-	"""
+def verify_checksum(metadata_map, contents):
+	return crypt.asym_dec(metadata_map["cpk"], metadata_map["checksum"]) == crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
 
-def create_checksum(metadata_map, contents):	# Leo
-	"""
-	return enc(metadata_map["csk"], hash(contents|metadata_map["cpk"]|metadata_map[""]|metadata_map["edit_number"]))
-	"""
+def create_checksum(metadata_map, contents, csk):
+	hashed = crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
+	return crypt.asym_enc(csk, hashed)
+
+def test_verify_and_create_checksum():
+	(len_pk, cpk, len_sk, csk) = crypt.create_asym_key_pair()
+	contents = "this semester is so long"
+	metadata_map = {}
+	metadata_map["cpk"] = cpk
+	metadata_map["edit_number"] = "123456"
+	checksum = create_checksum(metadata_map, contents, csk)
 
 #~~~~~~~~~~~~~~~~~~~~~~~ API functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def api_get_err_log():	# LEO
-	"""
+def api_get_err_log():
 	return client_err_msgs
-	"""
 
 def api_create_user(user, passw):	# LEO
 	"""
@@ -846,3 +839,4 @@ def api_closedir(handle):
 #test_encrypt_path()
 #test_update_keys()
 #test_path_parent()
+#test_verify_and_create_checksum()
