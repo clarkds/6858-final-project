@@ -74,7 +74,6 @@ client_working_dir = None
 client_secrets = {}
 client_loggedIn = False		#True or False. all functions throw an exception if not client_loggedIn
 client_keys = {}			#key = enc_path, val = (file_RK, file_WK)
-client_permissions_handle = None
 client_socket = None
 client_open_files = {}		#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
 	# metadata_map is for accessing each part of metadata
@@ -96,7 +95,6 @@ def reset_client_vars():
 	global client_secrets
 	global client_loggedIn
 	global client_keys
-	global client_permissions_handle
 	global client_socket
 	global client_open_files
 	
@@ -108,7 +106,6 @@ def reset_client_vars():
 	client_secrets = {}
 	client_loggedIn = False
 	client_keys = {}
-	client_permissions_handle = None
 		
 	if client_socket is not None:
 		try:
@@ -533,21 +530,31 @@ def test_api_create_user():
 	TESTING_ALLOW_RECREATE_USER = True
 
 def api_login(user, passw, secretsFile=None):	# LEO
-	"""
 	if api_login_helper(user, passw, secretsFile):
-		passw
+		return True
 	else:
 		api_logout()
-	"""
+		return False
 
 def api_login_helper(user, passw, secretsFile):	# LEO
-	"""
-	//check that user is alphanumeric
+	global client_user
+	global client_encUser
+	global client_working_dir
+	global client_passw
+	global client_secrets
+	global client_all_public_keys
+	
+	if not valid_user_pass(user, passw):
+		return False
+
 	client_user = user
-	client_encUser = det(user)
+	client_encUser = crypt.det(user)
 	client_working_dir = "/" + client_user
 	client_passw = passw
 
+	return True
+	
+	"""
 	if secretsFile is None:
 		client_secrets = sym_dec(hash(passw), dataDir/user0/secrets)
 		user_sk = client_secrets ["user_sk"]
@@ -570,15 +577,14 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 	
 		if not update_keys():
 			return False
-	
-		client_permissions_handle = fopen("user0/granted_permissions")
-		if client_permissions_handle == 0:
-			return False
-	
+		
 		return True
 	else:
 		return False
 	"""
+
+def test_api_login():
+	assert api_login("leo", "123456")
 
 def api_logout(keepfiles=False):	# logout
 	#TODO: close all open files
@@ -910,3 +916,4 @@ def api_closedir(handle):
 #test_path_parent()
 #test_verify_and_create_checksum()
 #test_api_create_user()
+test_api_login()
