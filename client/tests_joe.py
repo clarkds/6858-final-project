@@ -3,6 +3,7 @@ import string
 import os
 import pickle
 import crypt
+import json
 client_working_dir='bobby/w'
 client_secrets={'time':'boby'}
 client_user='bbbb'
@@ -136,22 +137,13 @@ def parse_log(data):
 		bp=0
 		watermark=data[0:len(WATERMARK)]
 		bp+=len(watermark)
-		file_secret_Hex=data[bp:bp+10]
-		file_secret_len=int(file_secret_Hex,16)
+		contents_Hex=data[bp:bp+10]
+		contents_len=int(file_secret_Hex,16)
 		bp+=10
-		file_secret=data[bp:bp+file_secret_len]
-		bp+=file_secret_len
-		CSK_Hex=data[bp:bp+10]
-		CSK_len=int(CSK_Hex,16)
-		bp+=10
-		CSK=data[bp:bp+CSK_len]
-		bp+=CSK_len
-		
-		edit_list_Hex=data[bp:bp+10]
-		edit_list_len=int(edit_list_Hex,16)
-		bp+=10
-		edit_list=data[bp:bp+edit_list_len]
-		return (secret,CSK,edit_list)
+		contents=data[bp:bp+file_secret_len]
+		diffObj=pickle.loads(contents)
+		###need to figure out how this works
+		return None
 	except:
 		return None
 	"""
@@ -250,81 +242,117 @@ def test_fseek_ftell_fwrite_fread_fflush():
 	newfile.close()
 	print client_open_files[newfile]
 	
-test_fseek_ftell_fwrite_fread_fflush()	
+#test_fseek_ftell_fwrite_fread_fflush()	
 
 
-def api_set_permissions(path, new_readers_list, new_writers_list,delete_my_permission=False):
-	"""
-	permissions_map = read_permissions_map()
-	enc_path = encrypt_path(path)
-	[old_readers_list, old_writers_list] = permissions_map[enc_path]
-	permissions_map[enc_path] = [new_readers_list, new_writers_list]
-	write_permissions_map(permissions_map)
-	success = api_fflush(client_permissions_handle)
-	(old_read_key,old_write_key)=client_keys[path]
 
-	(new_rk, new_wk) = create_sym_key(hash(client_enc_passw), enc_path, client_enc_username), create_sym_key(hash(client_enc_passw), enc_path, client_enc_username)
+def read_permissions_list(handle): ### for testing
+	m=[[('sally',crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa'))],[('tommy',crypt.create_sym_key('asdfjklasdfjkl', 'tommy', 'bbbbbbb'))]]
+	print m
+	return m
 	
+def encrypt_path(path):
+	return '/user1/a/b/boby'
+	
+def write_permissions_list(handle,new_permissions):
+	return True
+
+def api_client_send(msg):
+	print msg
+	return True
+
+def api_fflush(handle):
+	return True
+	
+def cryptdet(s):
+	return 'sek.fnaseoifbn'
+
+def api_set_permissions(path, log_handle, new_readers_list, new_writers_list,delete_my_permission=False):
+	global client_user
+	global client_passw
+	global client_loggedIn
+	global client_public_keys
+	global client_keys
+	global client_encUser
+	
+	if client_loggedIn==False:
+		return None
+	permissions_list = read_permissions_list(log_handle)
+	enc_path = encrypt_path(path)
+	[old_readers_list, old_writers_list] = permissions_list
+	new_permissions = [new_readers_list, new_writers_list]
+	write_permissions_list(log_handle,new_permissions)
+	(old_read_key,old_write_key)=client_keys[path]
+	(new_rk, new_wk) = crypt.create_sym_key(crypt.hash(client_passw), enc_path, client_user), crypt.create_sym_key(crypt.hash(client_passw), enc_path, client_user)
 	old_permissions=[]
 	for readers in old_readers_list:
+		reader=readers[0]
 		if readers not in old_writers_list:
-			store=json (enc_path,old_read_key,None)
-			old_permissons.append((det(reader), sym_enc(client_public_keys[det(reader)], store)
+			store=pickle.dumps((enc_path,old_read_key,None))
+			old_permissions.append((reader, crypt.sym_enc(client_public_keys[reader][1], store)))
 	
+			
 	for writers in old_writers_list:
-		store=joson(enc_path,old_read_key,old_write_key)
-		old_permissons.append((det(reader),sym_enc(client_public_keys[det(reader)], store)
+		writer=writers[0]
+		store=pickle.dumps((enc_path,old_read_key,old_write_key))
+		old_permissions.append((writer,crypt.sym_enc(client_public_keys[writer][1], store)))
+	###old_permissions=json.dumps(old_permissions)
 	client_keys[path]=(new_rk, new_wk)
-	store = json(enc_path, new_rk, new_wk)
-	my_new_perm  = (client_enc_user, sym_enc(client_public_key[client_enc_user]))
+	store = pickle.dumps((enc_path, new_rk, new_wk))
+	my_new_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser][1],store))
+	###my_new_perm=json.dumps(my_new_perm)
+	store = pickle.dumps((enc_path,old_read_key,old_write_key))
+	my_old_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser][1],store))
+	old_permissions.append(my_old_perm)
 	
-	client_keys[path]=(old_rk, old_wk)
-	store = json(enc_path,old_read_key,old_write_key)
-	my_old_perm  = (client_enc_user, sym_enc(client_public_key[client_enc_user]))
-
 	new_permissions=[]
 	for readers in new_readers_list:
+		reader=readers
 		if readers not in new_writers_list:
-			store=json (enc_path,old_read_key,None)
-			new_permissons.append((det(reader), sym_enc(client_public_keys[det(reader)], store)
+			store=pickle.dumps((enc_path,old_read_key,None))
+			new_permissions.append((reader, crypt.sym_enc(client_public_keys[readers][1], store)))
 	
 	for writers in new_writers_list:
-		store=joson(enc_path,old_read_key,old_write_key)
-		new_permissons.append((det(reader),sym_enc(client_public_keys[det(reader)], store)
+		store=pickle.dumps((enc_path,old_read_key,old_write_key))
+		writer=writers
+		new_permissions.append((writer,crypt.sym_enc(client_public_keys[writer][1], store)))
 
-	if !success
-		return 0
-	if !delete_my_permssion
-		{
-			OP: "addPermissions",
-			ENC_USER: client_enc_user,
-			users_and_perms: [my_new_perm]
-		}
-		if !success
-			return 0
-	change the key
-	api_fflush(permissions_file_handle)
-	{
-		OP: "removePermissions"
-		ENC_USER: client_enc_user
-		users_and_perms: [my_old_perm]+old_permissions
-	}
-	if !success
-		return 0
-	{
-		OP: "addPermissions", 
-		ENC_USER=client_enc_user,
-		users_and_perms: [new_perms]+new_permissions
+
+	if delete_my_permission==False:
+		new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+		if api_client_send(new_message)==None:
+			return (0,'my new permission')
+			
+			
+	##change the key
+	if api_fflush(log_handle)==None:
+		return (0,'flushing log')
 		
-	}
-	if !success
-		return 0
-	
+	removed_perm={"ENC_USER":client_encUser, "OP":"deletePermissions", "USERS_AND_PERMS":old_permissions}
+	if api_client_send(removed_perm)==None:
+		return (0,'revoking permissions')
+
+	added_perm={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":new_permissions}
+	if api_client_send(added_perm)==None:
+		return (0,'adding new permissions')
+
 	return 1
-	"""
 
-
-
+def test_set_perms():
+	global client_user
+	client_user='bob'
+	global client_passw
+	client_passw='bob'
+	global client_loggedIn
+	client_loggedIn=True
+	global client_public_keys
+	client_public_keys={'bob':crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa'),'sally':crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa'),'tommy':crypt.create_sym_key('asdfjklasdfjkl', 'tommy', 'bbbbbbbb')}
+	global client_keys
+	client_keys={'/a/b/c':((3,'one'),(3,'two'))}
+	global client_encUser
+	client_encUser=client_user
+	print api_set_permissions('/a/b/c', 'log_handle', ['sally'], ['tommy'], delete_my_permission=False)
+test_set_perms()
 
 #"""
 #	mkdir dataDir, dataDir/user0 dataDir/user0/data
