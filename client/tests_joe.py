@@ -187,6 +187,7 @@ def parse_log(data):
 		bp=0
 		watermark=data[0:len(WATERMARK)]
 		if watermark!=WATERMARK:
+			print 'theres not watermark!@!!'
 			return False
 		bp+=len(watermark)
 		contents_Hex=data[bp:bp+10]
@@ -310,7 +311,7 @@ def read_permissions_list(handle): ### returns permissons of a file by reading t
 	global client_open_files
 	global client_keys
 	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff=crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]],diff.read())
+	dec_diff=crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1][-1],diff.read())
 	diff.close()
 	diff_obj=parse_log(dec_diff)
 	if diff_obj==False:
@@ -331,12 +332,12 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 	dec_diff=crypt.sym_dec(old_write_key,diff.read())
 	diff.close()
 	diff_obj=parse_log(dec_diff)
-	diff_obj.update_perms(new_permissions[0],new_permissions[1])
+	diff_obj.update_perm(new_permissions[0],new_permissions[1])
 	diff_obj.update_secrets(new_csk,new_filepassw)
 	pickled_diff=pickle.dumps(diff_obj)
 	
 	new_log=WATERMARK+hex_string(pickled_diff)+pickled_diff
-	new_log_file=crypt.sym_enc(client_keys[client_open_files[handle][ENC_PATH]],new_log)
+	new_log_file=crypt.sym_enc(client_keys[client_open_files[handle][ENC_PATH]][1][-1],new_log)[1]
 	
 	newdiff=open(client_open_files[handle][LOG_PATH_ON_DISK],'w')
 	newdiff.write(new_log_file)
@@ -353,7 +354,8 @@ def test_read_and_write_to_log():
 	client_keys={}
 	global client_encUser
 	global client_open_files
-
+	global WATERMARK
+	WATERMARK='hey there!'
 	disk_place='testdifflog'
 	otherfile='testfile'
 	m=open(otherfile,'w+')
@@ -367,14 +369,25 @@ def test_read_and_write_to_log():
 	#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
 	# metadata_map is for accessing each part of metadata
 	testdif=difflog.diff_log(secrets[-1],filepassw)
-	pickledtestdif=crypt.sym_enc(writesecret[-1],pickle.dumps(testdif))
+	testdif.update_perm(['hi'],['bye'])
+	store=pickle.dumps(testdif)
+	store_len=hex_string(store)
+	pickledtestdif=str(crypt.sym_enc(writesecret[-1],WATERMARK+store_len+store)[1])
 	testing=open(disk_place,'w')
 	testing.write(pickledtestdif)
 	testing.close()
-	print read_permissions_list(m)
+	if read_permissions_list(m)!=[['hi'],['bye']]:
+		return False
+	writesecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
+	readsecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
+	client_keys[encrypt_path(otherfile)]=[readsecret1,writesecret1]
+	write_permissions_and_secrets(m,[['a'],['b']],'someday','bob',writesecret[-1])
+	if read_permissions_list(m)!=[['a'],['b']]:
+		return False
+	return True
 
 print 'logreadtest'
-test_read_and_write_to_log()
+print test_read_and_write_to_log()
 	
 	
 	
@@ -394,7 +407,7 @@ def api_fflush(handle):
 def cryptdet(s):
 	return 'sek.fnaseoifbn'
 
-def api_set_permissions(path, log_handle, new_readers_list, new_writers_list,delete_my_permission=False):
+def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_my_permission=False):
 	global client_user
 	global client_passw
 	global client_loggedIn
@@ -404,11 +417,11 @@ def api_set_permissions(path, log_handle, new_readers_list, new_writers_list,del
 	
 	if client_loggedIn==False:
 		return None
-	permissions_list = read_permissions_list(log_handle)
+	permissions_list = read_permissions_list(handle)
 	enc_path = encrypt_path(path)
 	[old_readers_list, old_writers_list] = permissions_list
 	new_permissions = [new_readers_list, new_writers_list]
-	write_permissions_list(log_handle,new_permissions)
+	write_permissions_list(handle,new_permissions)
 	(old_read_key,old_write_key)=client_keys[path]
 	(new_rk, new_wk) = crypt.create_sym_key(crypt.hash(client_passw), enc_path, client_user), crypt.create_sym_key(crypt.hash(client_passw), enc_path, client_user)
 	old_permissions=[]
@@ -432,6 +445,9 @@ def api_set_permissions(path, log_handle, new_readers_list, new_writers_list,del
 	my_old_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser][1],store))
 	old_permissions.append(my_old_perm)
 	
+	#insert new keys into log file
+	
+	
 	new_permissions=[]
 	for readers in new_readers_list:
 		reader=readers
@@ -452,7 +468,7 @@ def api_set_permissions(path, log_handle, new_readers_list, new_writers_list,del
 			
 			
 	##change the key
-	if api_fflush(log_handle)==None:
+	if api_fflush(handle)==None:
 		return (0,'flushing log')
 		
 	removed_perm={"ENC_USER":client_encUser, "OP":"deletePermissions", "USERS_AND_PERMS":old_permissions}
@@ -478,7 +494,7 @@ def test_set_perms():
 	client_keys={'/a/b/c':((3,'one'),(3,'two'))}
 	global client_encUser
 	client_encUser=client_user
-	print api_set_permissions('/a/b/c', 'log_handle', ['sally'], ['tommy'], delete_my_permission=False)
+	print api_set_permissions('/a/b/c', 'handle', ['sally'], ['tommy'], delete_my_permission=False)
 test_set_perms()
 
 #"""

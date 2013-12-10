@@ -28,7 +28,7 @@ class diff_log(list):
         text_patches = dmp.patch_toText(patches)
         return text_patches
     
-    def update_secrets(csk,filepassw):
+    def update_secrets(self,csk,filepassw):
     	self.csk=csk
     	self.filepassw=filepassw
     	
