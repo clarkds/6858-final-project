@@ -65,7 +65,6 @@ def writekey_setup():
 	return dbsetup("writekey", WriteKeyBase)
 
 def add_write_key(path, key):
-	print path
 	wkey = WriteKey()
 	wkey.path = path
 	wkey.key = key
@@ -85,7 +84,6 @@ def update_write_key(path, key, new_key):
 		return False
 
 def check_write_key(path, key):
-	print path
 	db = writekey_setup()
 	existing_key = db.query(WriteKey).get(path)
 	if existing_key.key == key:
@@ -192,7 +190,6 @@ def user_exists(username):
 	db = permission_setup()
 	user = db.query(Permission).filter(Permission.username == username).first()
 	if user:
-		print user
 		return True
 	return False
 		

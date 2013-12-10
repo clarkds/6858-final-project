@@ -18,7 +18,7 @@ s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 def create_user_test():
 	s0.connect((SERVER_IP, SERVER_PORT))
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"addPermissions", "USERS_AND_PERMS":[("asaj", "11111"), ("asaj", "22222")]})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0] == ["asaj", "asaj", "11111"]
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][1] == ["asaj", "asaj", "22222"]
@@ -48,8 +48,8 @@ def create_user_test():
 	"""
 	s1.connect((SERVER_IP, SERVER_PORT))
 	s2.connect((SERVER_IP, SERVER_PORT))
-	assert client_send(s1, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"penis"})["STATUS"] == 0
-	assert client_send(s2, {"ENC_USER":"jasa", "OP":"createUser", "PASSWORD":"penis", "KEY":"88888"})["STATUS"] == 0
+	assert client_send(s1, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"test"})["STATUS"] == 0
+	assert client_send(s2, {"ENC_USER":"jasa", "OP":"createUser", "PASSWORD":"test", "KEY":"88888"})["STATUS"] == 0
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0][2] == "22222"
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][1][2] == "11111"
 	assert client_send(s1, {"ENC_USER":"asaj", "OP":"getAllPublicKeyS", "TARGET":"asaj"})["KEY"] == "55555"
