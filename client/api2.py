@@ -247,7 +247,6 @@ def test_log_path():
 		return False
 
 def write_secrets():
-	# creates path for data/user/data and data/user/secrets if there is none, writes in new secrets, returns True or False if all operations succeeded
 	global client_user
 	global client_secrets
 	global client_passw
@@ -258,7 +257,6 @@ def write_secrets():
 		if os.path.exists('data')==False:
 			os.mkdir('data')
 		pickled=pickle.dumps(client_secrets)
-		print crypt.sym_enc(client_passw, pickled)
 		enc_pickle=crypt.sym_enc(client_passw, pickled)[1]
 		if os.path.exists('data/'+client_user)==False:
 			os.mkdir('data/'+client_user)
@@ -273,23 +271,36 @@ def write_secrets():
 		ans=False
 	return ans
 	
+
+
+	
+def load_secrets():
+	try:
+		global client_user
+		global client_secrets
+		global client_passw
+		secret_file=open('data/'+client_user+'/secrets','r')
+		decrypted_pickle=crypt.sym_dec(client_passw, secre_file.read())
+		client_secrets=pickle.loads(decrypted_pickle)
+		secret_file.close()
+		return True
+	except:
+		return False
+
+
+
 def test_write_secrets():
 	global client_working_dir
 	client_working_dir='bobby/w'
 	global client_secrets
 	client_secrest={'time':'boby'}
+	test={'time':'boby'}
 	global client_user
 	client_user='bbbb'
 	global client_passw
 	client_passw=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
 	m=write_secrets()
-	if m==False:
-		return False
-	testFile=open('data/bbbb/secrets')
-	testString=testFile.read()
-	decrypted_pickled=crypt.sym_dec(client_passw, testString)
-	test=pickle.loads(decrypted_pickled)
-	print test
+	w=load_secrets()
 	if test==client_secrets:
 		return True
 	else:
@@ -908,9 +919,9 @@ def api_closedir(handle):
 	#api_fclose(handle)
 	pass
 
-test_send_to_server()
-test_encrypt_path()
-test_update_keys()
-test_path_parent()
-test_verify_and_create_checksum()
+#test_send_to_server()
+#test_encrypt_path()
+#test_update_keys()
+#test_path_parent()
+#test_verify_and_create_checksum()
 #test_api_create_user()

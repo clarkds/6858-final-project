@@ -74,7 +74,6 @@ def write_secrets():
 		if os.path.exists('data')==False:
 			os.mkdir('data')
 		pickled=pickle.dumps(client_secrets)
-		print crypt.sym_enc(client_passw, pickled)
 		enc_pickle=crypt.sym_enc(client_passw, pickled)[1]
 		if os.path.exists('data/'+client_user)==False:
 			os.mkdir('data/'+client_user)
@@ -89,31 +88,43 @@ def write_secrets():
 		ans=False
 	return ans
 	
+
+
+	
+def load_secrets():
+	try:
+		global client_user
+		global client_secrets
+		global client_passw
+		secret_file=open('data/'+client_user+'/secrets','r')
+		decrypted_pickle=crypt.sym_dec(client_passw, secre_file.read())
+		client_secrets=pickle.loads(decrypted_pickle)
+		secret_file.close()
+		return True
+	except:
+		return False
+
+
+
 def test_write_secrets():
 	global client_working_dir
 	client_working_dir='bobby/w'
 	global client_secrets
 	client_secrest={'time':'boby'}
+	test={'time':'boby'}
 	global client_user
 	client_user='bbbb'
 	global client_passw
 	client_passw=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
 	m=write_secrets()
-	if m==False:
-		return False
-	testFile=open('data/bbbb/secrets')
-	testString=testFile.read()
-	decrypted_pickled=crypt.sym_dec(client_passw, testString)
-	test=pickle.loads(decrypted_pickled)
-	print test
+	w=load_secrets()
 	if test==client_secrets:
 		return True
 	else:
 		return False
 
+print 'secretestest'
 print test_write_secrets()
-	
-	
 
 def parse_metadata_and_contents_for_file(data):
 	#returns tuple of (checkSum,CPK,edit_number,contents) or None
@@ -311,7 +322,7 @@ def read_permissions_list(handle): ### returns permissons of a file by reading t
 	global client_open_files
 	global client_keys
 	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff=crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1][-1],diff.read())
+	dec_diff=crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
 	diff.close()
 	diff_obj=parse_log(dec_diff)
 	if diff_obj==False:
@@ -337,7 +348,7 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 	pickled_diff=pickle.dumps(diff_obj)
 	
 	new_log=WATERMARK+hex_string(pickled_diff)+pickled_diff
-	new_log_file=crypt.sym_enc(client_keys[client_open_files[handle][ENC_PATH]][1][-1],new_log)[1]
+	new_log_file=crypt.sym_enc(client_keys[client_open_files[handle][ENC_PATH]][1],new_log)[1]
 	
 	newdiff=open(client_open_files[handle][LOG_PATH_ON_DISK],'w')
 	newdiff.write(new_log_file)
@@ -360,8 +371,8 @@ def test_read_and_write_to_log():
 	otherfile='testfile'
 	m=open(otherfile,'w+')
 	secrets=crypt.create_asym_key_pair()
-	writesecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
-	readsecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
+	writesecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
+	readsecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
 	client_keys[encrypt_path(otherfile)]=[readsecret,writesecret]
 	filepassw=crypt.hash('abcdefghijklmnop')
 	client_open_files[m]=[otherfile,encrypt_path(otherfile),{'checksum':secrets[-1],'edit_number':'hithere','cpk':secrets[1]},otherfile,disk_place,'boby','w+']
@@ -372,16 +383,16 @@ def test_read_and_write_to_log():
 	testdif.update_perm(['hi'],['bye'])
 	store=pickle.dumps(testdif)
 	store_len=hex_string(store)
-	pickledtestdif=str(crypt.sym_enc(writesecret[-1],WATERMARK+store_len+store)[1])
+	pickledtestdif=str(crypt.sym_enc(writesecret,WATERMARK+store_len+store)[1])
 	testing=open(disk_place,'w')
 	testing.write(pickledtestdif)
 	testing.close()
 	if read_permissions_list(m)!=[['hi'],['bye']]:
 		return False
-	writesecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
-	readsecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')
+	writesecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
+	readsecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
 	client_keys[encrypt_path(otherfile)]=[readsecret1,writesecret1]
-	write_permissions_and_secrets(m,[['a'],['b']],'someday','bob',writesecret[-1])
+	write_permissions_and_secrets(m,[['a'],['b']],'someday','bob',writesecret)
 	if read_permissions_list(m)!=[['a'],['b']]:
 		return False
 	return True
@@ -406,7 +417,9 @@ def api_fflush(handle):
 	
 def cryptdet(s):
 	return 'sek.fnaseoifbn'
-
+def randomword(length):
+   return ''.join(random.choice(string.lowercase) for i in range(length))
+   
 def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_my_permission=False):
 	global client_user
 	global client_passw
@@ -423,7 +436,7 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	new_permissions = [new_readers_list, new_writers_list]
 	write_permissions_list(handle,new_permissions)
 	(old_read_key,old_write_key)=client_keys[path]
-	(new_rk, new_wk) = crypt.create_sym_key(crypt.hash(client_passw), enc_path, client_user), crypt.create_sym_key(crypt.hash(client_passw), enc_path, client_user)
+	(new_rk, new_wk) = (crypt.create_sym_key(client_passw, enc_path, client_user)[1], crypt.create_sym_key(client_passw+'writer', enc_path, client_user)[1])
 	old_permissions=[]
 	for readers in old_readers_list:
 		reader=readers[0]
@@ -445,7 +458,13 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	my_old_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser][1],store))
 	old_permissions.append(my_old_perm)
 	
-	#insert new keys into log file
+	new_filepassw=randomword(40)
+	[new_cpk,new_csk]=crypt.create_asym_key_pair()
+	#################################
+	#########################
+	#######write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key)
+	
+	###we need to change the cpk and checksum of the regular file!!!!!! and the log
 	
 	
 	new_permissions=[]
