@@ -48,7 +48,9 @@ def hash(str):
 
 def det(plaintext):
     pad_text = pad(plaintext)
-    obj = AES.new(key, AES.MODE_ECB)
+    #TODO: used to be AES.new(key, AES.MOCDE_ECB) but key was undefined
+    # is this correct?
+    obj = AES.new('This is a key456', AES.MODE_ECB)
     ciphertext = obj.encrypt(pad_text)
     return bytesToStr(ciphertext)
 

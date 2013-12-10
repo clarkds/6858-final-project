@@ -13,6 +13,8 @@ import crypt
 import binascii
 import string
 import time
+import re
+import random
 
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5007
@@ -58,8 +60,11 @@ watermark
 
 client_err_msgs = ""
 
+TESTING_ON = True
+TESTING_ALLOW_RECREATE_USER = True
 WATERMARK = crypt.watermark()
 SOCKET_TIMEOUT = 5
+SECRET_LEN = 24
 
 client_all_public_keys={} 	#key=det(user), val = public key of users
 client_user = None
@@ -73,14 +78,49 @@ client_permissions_handle = None
 client_socket = None
 client_open_files = {}		#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
 	# metadata_map is for accessing each part of metadata
-client_user_sk = None
 
+# tuple-indices for values in client_open_files
 PATH = 0
 ENC_PATH = 1
 METADATA = 2
 CONTENTS_PATH_ON_DISK = 3
 LOG_PATH_ON_DISK = 4
 MODE = 5
+
+def reset_client_vars():
+	global client_all_public_keys
+	global client_user
+	global client_encUser
+	global client_passw
+	global client_working_dir
+	global client_secrets
+	global client_loggedIn
+	global client_keys
+	global client_permissions_handle
+	global client_socket
+	global client_open_files
+	
+	client_all_public_keys={}
+	client_user = None
+	client_encUser = None
+	client_passw = None
+	client_working_dir = None
+	client_secrets = {}
+	client_loggedIn = False
+	client_keys = {}
+	client_permissions_handle = None
+		
+	if client_socket is not None:
+		try:
+			client_socket.close()
+		except:
+			pass
+	client_socket = None
+		
+	client_open_files = {}
+	return
+
+reset_client_vars()
 
 #~~~~~~~~~~~~~~~~~~~~~~~ helper functions ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -89,6 +129,9 @@ def bytesToStr(data):
 	
 def strToBytes(string):
 	return binascii.unhexlify(string)
+
+def randomword(length):
+   return ''.join(random.choice(string.lowercase) for i in range(length))
 
 # returns a msg obj on success, None on error
 def send_to_server(msg_obj):
@@ -106,12 +149,13 @@ def send_to_server(msg_obj):
 		
 	if resp["STATUS"] != 0:
 		if "ERROR" in resp.keys():
-			# for unit tests, since they re-create same user
-			if resp["ERROR"] == 'User already exists':
-				resp["STATUS"] = 0
-				setup_socket()
-				assert msg.client_send(client_socket, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"penis"})["STATUS"] == 0
-				return resp
+			if TESTING_ON:
+				# for unit tests, since they re-create same user
+				if TESTING_ALLOW_RECREATE_USER and resp["ERROR"] == 'User already exists':
+					resp["STATUS"] = 0
+					setup_socket()
+					assert msg.client_send(client_socket, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"penis"})["STATUS"] == 0
+					return resp
 
 			client_err_msgs += resp["ERROR"] + "\n"
 		return None
@@ -127,6 +171,7 @@ def test_send_to_server():
 	assert send_to_server({"ENC_USER":"asaj", "OP":"mkdir", "PATH":"xxxxxnoexist/secondtest"}) is None
 	setup_socket()
 	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
+
 	print "YAYY"
 	client_socket.close()
 
@@ -246,19 +291,9 @@ def test_write_secrets():
 		return False
 
 def update_keys():
-	"""
-	client_keys = {}
-	{OP: "getPermissions", ENC_USER: client_encUser}
-	{OP: "ack", STATUS: 0 on success, permissions: [jenc_perm1, enc_perm2, enc_perm3]}
-	if status != 0:
-		return False
-	for each perm in permissions:
-		(enc_pathname, read_key, write_key) = un-json(asm_dec(client_user_sk, perm))
-		client_keys[enc_pathname] = (read_key, write_key)
-	return True
-	"""
 	global client_keys
 	global client_encUser
+	global client_secrets
 	
 	client_keys = {}
 	resp = send_to_server({"OP": "getPermissions", "ENC_USER": client_encUser, "TARGET": client_encUser})
@@ -266,7 +301,7 @@ def update_keys():
 		return False
 	print "******* decrypting perm with user sk *********************"
 	for perm_tuple in resp["PERMISSIONS"]:
-		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client_user_sk, perm_tuple[2]))
+		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client_secrets["user_sk"], perm_tuple[2]))
 		client_keys[enc_pathname] = (read_key, write_key)
 	print "KOBE BRYANTTTTTT"
 	return True
@@ -275,11 +310,11 @@ def test_update_keys():
 	setup_socket()
 	global client_keys
 	global client_encUser
-	global client_user_sk
+	global client_secrets
 	
 	print "1"
 	(len_pk, pk, len_sk, sk) = crypt.create_asym_key_pair()
-	client_user_sk = sk;
+	client_secrets["user_sk"] = sk;
 	client_encUser = "asaj"
 	perm_len, perm = crypt.asym_enc(pk, json.dumps(("enc_pathname", "read_key", "write_key")))
 	perm = (client_encUser, perm)
@@ -443,6 +478,10 @@ def test_verify_and_create_checksum():
 	metadata_map["edit_number"] = "123456"
 	checksum = create_checksum(metadata_map, contents, csk)
 
+def valid_user_pass(user, passw):
+	# allowed: alphanumeric + underscores and dashes
+	return re.match('^[\w_-]+$', user) and len(passw) >= 6
+
 #~~~~~~~~~~~~~~~~~~~~~~~ API functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def api_get_err_log():
@@ -459,6 +498,38 @@ def api_create_user(user, passw):	# LEO
 		client_secrets ["user_sk"] = (len, user_sk)
 		write_secrets()
 	"""
+	global client_user
+	global client_secrets
+	global client_passw
+	
+	if not valid_user_pass(user, passw):
+		return False
+	
+	client_user = user
+	client_passw = passw
+	
+	(len_pk, user_pk, len_sk, user_sk) = crypt.create_asym_key_pair()
+	homedir_secret = randomword(SECRET_LEN)
+	setup_socket()
+	resp = send_to_server({
+		"ENC_USER": crypt.det(user),
+		"OP": "createUser",
+		"PASSWORD": passw,
+		"KEY": user_pk,
+		"PARENT_SECRET":homedir_secret})
+	if resp is None:
+		return False
+	client_secrets ["user_pk"] = (len_pk, user_pk)
+	client_secrets ["user_sk"] = (len_sk, user_sk)
+	write_secrets()
+	return True
+	
+def test_api_create_user():
+	assert api_create_user("leo?", "123456") == False
+	assert api_create_user("leo", "123") == False
+	TESTING_ALLOW_RECREATE_USER = False
+	api_create_user("leo", "123456")
+	TESTING_ALLOW_RECREATE_USER = True
 
 def api_login(user, passw, secretsFile=None):	# LEO
 	"""
@@ -509,12 +580,9 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 	"""
 
 def api_logout(keepfiles=False):	# logout
-	"""
-	clear all global variables, set client_loggedIn = false	
-	close all open files
-	if !keepfiles:
-		remove dataDir/user/data
-	"""
+	#TODO: close all open files
+	#TODO: if !keepfiles, remove dataDir/user/data
+	reset_client_vars()
 
 # mode = "r|w"
 def api_fopen(path, mode):
@@ -835,8 +903,9 @@ def api_closedir(handle):
 	#api_fclose(handle)
 	pass
 
-#test_send_to_server()
-#test_encrypt_path()
-#test_update_keys()
-#test_path_parent()
-#test_verify_and_create_checksum()
+test_send_to_server()
+test_encrypt_path()
+test_update_keys()
+test_path_parent()
+test_verify_and_create_checksum()
+#test_api_create_user()
