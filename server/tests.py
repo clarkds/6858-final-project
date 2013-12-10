@@ -16,16 +16,6 @@ s0 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# sends a msg_obj to the server and reads a msg_obj in reply
-def client_send(s, msg_obj):
-	# TODO: socket should come from a pool of sockets
-	# TODO: add a timeout, try/catch
-	print "Sent: " + str(msg_obj)
-	s.send(msgFromObj(msg_obj))
-	(msg_size, msg_obj) = readMsg(s)
-	print "Received: " + str(msg_obj)
-	return msg_obj
-
 def create_user_test():
 	s0.connect((SERVER_IP, SERVER_PORT))
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555"})["STATUS"] == 0

@@ -1,3 +1,21 @@
+import os
+
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+parentdir = parentdir + '/common'
+os.sys.path.insert(0,parentdir)
+
+import socket
+import json
+import sys
+import msg
+import traceback
+import crypt
+import binascii
+import string
+
+SERVER_IP = '127.0.0.1'
+SERVER_PORT = 5007
+
 """
 single dataDir for all users
 dataDir
@@ -37,6 +55,8 @@ watermark
 """
 #~~~~~~~~~~~~~~~~~~~~~~Global variables ~~~~~~~~~~~~~~~~~~~~~~~~~
 
+client_err_msgs = ""
+
 WATERMARK = "I HOPE THE SEMESTER IS ENDING"
 
 client_all_public_keys={} 	#key=det(user), val = public key of users
@@ -46,11 +66,12 @@ client_passw = None
 client_working_dir = None
 client_secrets = {}
 client_loggedIn = False		#True or False. all functions throw an exception if not client_loggedIn
-client_keys = {}			#key = path, val = (file_RK, file_WK)
+client_keys = {}			#key = enc_path, val = (file_RK, file_WK)
 client_permissions_handle = None
 client_socket = None
 client_open_files = {}		#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
 	# metadata_map is for accessing each part of metadata
+client_user_sk = None
 
 PATH = 0
 ENC_PATH = 1
@@ -61,6 +82,13 @@ MODE = 5
 
 #~~~~~~~~~~~~~~~~~~~~~~~ helper functions ~~~~~~~~~~~~~~~~~~~~~~~
 
+def bytesToStr(data):
+	return binascii.hexlify(data)
+	
+def strToBytes(string):
+	return binascii.unhexlify(string)
+
+# returns a msg obj on success, None on error
 def send_to_server(msg_obj):
 	"""
 	try {
@@ -72,13 +100,34 @@ def send_to_server(msg_obj):
 		logout()
 	return resp
 	"""
-	passw
+	global client_socket, client_err_msgs
+	try:
+		resp = msg.client_send(client_socket, msg_obj)
+	except Exception as e:
+		print "-------------------"
+		traceback.print_exc()
+		print "--------------------"
+		client_err_msgs += "exception when sending " + json.dumps(msg_obj) + "\n"
+		client_err_msgs += str(e)
+		api_logout()
+		return None
+		
+	if resp["STATUS"] != 0:
+		client_err_msgs += resp["ERROR"] + "\n"
+		return None
+		
+	return resp
 
-def read_from_server():
-	"""
-	similar to above
-	if STATUS != 0, also append ERRMSG to client_err_msgs
-	"""
+def testutil_setup_socket():
+	global client_socket
+	client_socket = msg.create_client_socket(SERVER_IP, SERVER_PORT)
+
+def test_send_to_server():
+	testutil_setup_socket()
+	#assert send_to_server({"ENC_USER":"asaj", "OP":"mkdir", "PATH":"xxxxxnoexist/secondtest"}) is None
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555"})["STATUS"] == 0
+	print "YAYY"
+	client_socket.close()
 
 def sanitize_path(path):
 	"""
@@ -87,7 +136,31 @@ def sanitize_path(path):
 	"""
 
 def encrypt_path(path):
-	passw
+	"""
+	# THIS IS BE WRONG
+	assert(path.startswith('/'))
+	try:
+		oldpath = path.split('/')
+		newpath = oldpath[:]
+		newpath[1]=crypt.det(newpath[1])
+		for part in range(2,len(newpath)):
+			previousPath=string.join(oldpath[0:part+1],'/')
+			(cipher_len, ciphertext) = crypt.sym_enc(client_keys[previousPath][0], newpath[part])
+			newpath[part] = ciphertext
+		return string.join(newpath,'/')
+	except:
+		return None
+	"""
+	return path
+
+def test_encrypt_path():
+	global client_keys
+	
+	user = "leo"
+	home_dir = "/" + user
+	(key_len, home_dir_key) = crypt.create_sym_key(crypt.hash(user), home_dir, user)
+	enc_user = crypt.sym_enc(home_dir_key, user)
+	# TODO...
 
 # any_path can be non-encrypted or encrypted
 def log_path(any_path):
@@ -113,16 +186,47 @@ def update_keys():
 		client_keys[enc_pathname] = (read_key, write_key)
 	return True
 	"""
+	global client_keys
+	global client_encUser
+	
+	client_keys = {}
+	resp = send_to_server({"OP": "getPermissions", "ENC_USER": client_encUser, "TARGET": client_encUser})
+	if resp is None:
+		return False
+	print "******* decrypting perm with user sk *********************"
+	for perm_tuple in resp["PERMISSIONS"]:
+		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client_user_sk, strToBytes(perm_tuple[2])))
+		client_keys[enc_pathname] = (read_key, write_key)
+	print "KOBE BRYANTTTTTT"
+	return True
+
+def test_update_keys():
+	testutil_setup_socket()
+	global client_keys
+	global client_encUser
+	global client_user_sk
+	
+	print "1"
+	(len_pk, pk, len_sk, sk) = crypt.create_asym_key_pair()
+	client_user_sk = sk;
+	client_encUser = "asaj"
+	perm_len, perm = crypt.asym_enc(pk, json.dumps(("enc_pathname", "read_key", "write_key")))
+	perm = bytesToStr(perm)
+	
+	print "2"
+	
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555"})["STATUS"] == 0
+	assert send_to_server({"ENC_USER":"asaj", "OP":"addPermission", "TARGET":"asaj", "PERMISSION": perm})["STATUS"] == 0
+	
+	update_keys()
+	
+	assert client_keys[enc_pathname] == (read_key, write_key)
 
 def get_metadata(handle):
-	"""
 	return client_open_files[handle][METADATA]
-	"""
 
 def get_log_path_on_disk(handle):
-	"""
 	return client_open_files[handle][LOG_PATH_ON_DISK]
-	"""
 
 # data is decrypted
 def parse_metadata_and_contents_for_file(data):
@@ -149,49 +253,59 @@ def parse_log_for_dir(data):
 	return (secret_number, edit_CSK, edit_list),  None on failure
 	"""
 
+def path_parent(path):
+	parts = path.split("/")
+	filename = parts[-1]
+	#print path
+	#print string.join(parts, "/"), "**********"
+	if len(parts) > 1:
+		parent = string.join(parts[0:-1], "/")
+	else:
+		parent = None
+	return (parent, filename)
+
 def save_file(data, path_on_disk):
-	"""
-	create all parent directories
-	write file
-	close file
-	return True or False
-	"""
+	(parent, filename) = path_parent(path_on_disk)
+	if parent is not None:
+		try:
+			if not os.path.exists(parent):
+				os.makedirs(parent)
+		except:
+			pass
+	try:
+		f = open(path_on_disk, "w")
+		f.write(data)
+		f.close()
+	except:
+		return False
+	
+	return True
+
+def test_path_parent():
+	assert path_parent("a") == (None, 'a')
+	assert path_parent("a/b") == ('a', 'b')
+	assert path_parent("a/b/c") == ('a/b', 'c')
+	assert path_parent("/a/b/c") == ('/a/b', 'c')
 
 # contents is a string
-def verify_checksum(metadata_map, contents):
+def verify_checksum(metadata_map, contents):	# Leo
 	"""
 	return asym_dec(metadata_map["cpk"], metadatamap["checksum"]) == hash(contents|metadata_map["cpk"]|metadata_map[""]|metadata_map["edit_number"])
 	"""
 
-def create_checksum(metadata_map, contents):
+def create_checksum(metadata_map, contents):	# Leo
 	"""
 	return enc(metadata_map["csk"], hash(contents|metadata_map["cpk"]|metadata_map[""]|metadata_map["edit_number"]))
 	"""
 
-# permissions_map: key=enc_path, val=[enc_reader_names_list, enc_writer_names_list]
-def read_permissions_map():
-	"""
-	permissions_file_contents = read(client_permissions_handle)
-	if permissions_file_contents == "":
-		return {}
-	else:
-		return unpickle(permissions_file_contents )
-	"""
-
-def write_permissions_map(permissions_map):
-	"""
-	truncate(handle)
-	fwrite(permissions_map, client_permissions_handle)
-	"""
-
 #~~~~~~~~~~~~~~~~~~~~~~~ API functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def api_get_err_log():
+def api_get_err_log():	# LEO
 	"""
 	return client_err_msgs
 	"""
 
-def api_create_user(user, passw):
+def api_create_user(user, passw):	# LEO
 	"""
 	//check that user is alphanumeric
 	create user_pk, user_sk
@@ -203,7 +317,7 @@ def api_create_user(user, passw):
 		write_secrets()
 	"""
 
-def api_login(user, passw, secretsFile=None):
+def api_login(user, passw, secretsFile=None):	# LEO
 	"""
 	if api_login_helper(user, passw, secretsFile):
 		passw
@@ -211,7 +325,7 @@ def api_login(user, passw, secretsFile=None):
 		api_logout()
 	"""
 
-def api_login_helper(user, passw, secretsFile):
+def api_login_helper(user, passw, secretsFile):	# LEO
 	"""
 	//check that user is alphanumeric
 	client_user = user
@@ -251,7 +365,7 @@ def api_login_helper(user, passw, secretsFile):
 		return False
 	"""
 
-def api_logout(keepfiles=False):
+def api_logout(keepfiles=False):	# logout
 	"""
 	clear all global variables, set client_loggedIn = false	
 	close all open files
@@ -351,27 +465,27 @@ def api_fopen(path, mode):
 	return handle
 	"""
 
-def api_fseek(handle, offset, whence):
+def api_fseek(handle, offset, whence):	#JOE
 	#return fseek(handle, offset, whence)
 	pass
 
-def api_ftell(handle):
+def api_ftell(handle):	#JOE
 	#return ftell(handle)
 	pass
 
-def api_fwrite(data, handle):
+def api_fwrite(data, handle):	#JOE
 	#return handle.write(data, handle)
 	pass
 
-def api_fread(n, handle):
+def api_fread(n, handle):	#JOE
 	#return fread(n, handle)
 	pass
 
-def api_fflush(handle):
+def api_fflush(handle):	#JOE
 	#return api_fflush_helper(handler, 0)
 	pass
 
-def api_fflush_helper(handle, attempt_num):
+def api_fflush_helper(handle, attempt_num):	#LEO???
 	"""
 	if attempt_num > 1:
 		return 0
@@ -399,7 +513,7 @@ def api_fflush_helper(handle, attempt_num):
 		recursive call (attempt_num+1)
 	"""
 
-def api_fclose(handle):
+def api_fclose(handle):	# fclose
 	"""
 	if mode == "w":
 		api_fflush()
@@ -430,7 +544,7 @@ def api_list_permissions(path):
 	"""
 
 # the file is f-opened
-def api_set_permissions(path, new_readers_list, new_writers_list,delete_my_permission=False):
+def api_set_permissions(path, new_readers_list, new_writers_list,delete_my_permission=False):	# JOE
 	"""
 	permissions_map = read_permissions_map()
 	enc_path = encrypt_path(path)
@@ -567,3 +681,8 @@ def api_list_dir(handle):
 def api_closedir(handle):
 	#api_fclose(handle)
 	pass
+
+#test_send_to_server()
+#test_encrypt_path()
+#test_update_keys()
+#test_path_parent()

@@ -1,7 +1,12 @@
+import os
+
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+parentdir = parentdir + '/common'
+os.sys.path.insert(0,parentdir) 
+
 from sqlalchemy import *
 from sqlalchemy.orm import *
 from sqlalchemy.ext.declarative import *
-import os
 import pbkdf2
 import base64
 import random
@@ -96,9 +101,9 @@ def add_permission(username, target, permission):
 	db.commit()
 
 def remove_permission(username, target, permission):
-	db = permission_setup()
+	"""db = permission_setup()
 	permission = db.query(Permission).filter(Permission.username == username, Permission.target = target, Permission.permission = permission).delete()
-	db.commit()
+	db.commit()"""
 
 def get_permissions_shared_by(username):
 	db = permission_setup()

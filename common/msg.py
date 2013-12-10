@@ -33,3 +33,17 @@ def readMsg(s):
 	msg_obj = json.loads(blockRead(s, msg_size))
 	return (msg_size, msg_obj)
 
+# sends a msg_obj to the server and reads a msg_obj in reply
+def client_send(s, msg_obj):
+	# TODO: socket should come from a pool of sockets
+	# TODO: add a timeout, try/catch
+	print "Sent: " + str(msg_obj)
+	s.send(msgFromObj(msg_obj))
+	(msg_size, msg_obj) = readMsg(s)
+	print "Received: " + str(msg_obj)
+	return msg_obj
+	
+def create_client_socket(server_ip, server_port):
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((server_ip, server_port))
+	return s

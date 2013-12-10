@@ -1,14 +1,16 @@
+import os
+
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+parentdir = parentdir + '/common'
+os.sys.path.insert(0,parentdir) 
+
 import SocketServer
 import socket
 import json
 import sys
 import thread
-import os
 import threading
 
-parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-parentdir = parentdir + '/common'
-os.sys.path.insert(0,parentdir) 
 from msg import *
 from db import *
 
@@ -150,8 +152,11 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 				self.request.send(msgFromObj({'OP':'ack', 'STATUS':1}))
 			self.request.send(msgFromObj(response))
 			print "Response: " + msgFromObj(response)	
-	
+
+SocketServer.TCPServer.allow_reuse_address = True
+
 class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+	
 	def verify_request(self, request, client_address):
 		active_users_lock.acquire()
 		(msg_size, msg_obj) = readMsg(request)
