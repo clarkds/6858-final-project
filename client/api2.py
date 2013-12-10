@@ -136,6 +136,8 @@ def randomword(length):
 # returns a msg obj on success, None on error
 def send_to_server(msg_obj):
 	global client_socket, client_err_msgs
+	global TESTING_ON, TESTING_ALLOW_RECREATE_USER
+	
 	try:
 		resp = msg.client_send(client_socket, msg_obj)
 	except Exception as e:
@@ -493,16 +495,7 @@ def api_get_err_log():
 	return client_err_msgs
 
 def api_create_user(user, passw):	# LEO
-	"""
-	//check that user is alphanumeric
-	create user_pk, user_sk
-	{OP: "createUser", ENC_USER: encUser, passw: passw, user_pk: (len, user_pk)}
-	{OP: "ack", STATUS: 0 on success}
-	if successful:
-		client_secrets ["user_pk"] = (len, user_pk)
-		client_secrets ["user_sk"] = (len, user_sk)
-		write_secrets()
-	"""
+	api_logout()
 	global client_user
 	global client_secrets
 	global client_passw
@@ -524,16 +517,19 @@ def api_create_user(user, passw):	# LEO
 		"PARENT_SECRET":homedir_secret})
 	if resp is None:
 		return False
-	client_secrets ["user_pk"] = (len_pk, user_pk)
-	client_secrets ["user_sk"] = (len_sk, user_sk)
+	client_secrets["user_pk"] = user_pk
+	client_secrets["user_sk"] = user_sk
 	write_secrets()
 	return True
 	
 def test_api_create_user():
+	global TESTING_ALLOW_RECREATE_USER
+	
 	assert api_create_user("leo?", "123456") == False
 	assert api_create_user("leo", "123") == False
 	TESTING_ALLOW_RECREATE_USER = False
 	assert api_create_user("leo", "123456")
+	assert api_create_user("leo", "123456") == False
 	TESTING_ALLOW_RECREATE_USER = True
 
 def api_login(user, passw, secretsFile=None):	# LEO
@@ -908,9 +904,9 @@ def api_closedir(handle):
 	#api_fclose(handle)
 	pass
 
-test_send_to_server()
-test_encrypt_path()
-test_update_keys()
-test_path_parent()
-test_verify_and_create_checksum()
+#test_send_to_server()
+#test_encrypt_path()
+#test_update_keys()
+#test_path_parent()
+#test_verify_and_create_checksum()
 #test_api_create_user()
