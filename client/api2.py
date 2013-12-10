@@ -141,10 +141,30 @@ def test_send_to_server():
 	client_socket.close()
 
 def sanitize_path(path):
-	"""
-	clean up the slashes
-	add working directory if necessary
-	"""
+# returns clean string of path. If path doesn't start with a /, prefixes global path to beginning of string or eror
+
+	global client_working_dir
+	if path[0]!='/' and client_working_dir!=None:
+		path=client_working_dir+'/'+path
+	elif path[0]!='/' and client_working_dir==None:
+		path='ERROR - NO CLIENT WORKING DIRECTORY'
+	path_parts = path.split('/')
+	path_parts = [path_parts[0]] + filter(None, path_parts[1:])	# remove empty strings from list
+	new_path_parts=[]
+	for a in path_parts:
+		if a!='..':
+			new_path_parts.append(a)
+	clean_path = string.join(new_path_parts,'/')
+	return clean_path
+
+def test_sanitize_path():
+	global client_working_dir
+	client_working_dir='bobby/w'
+	if sanitize_path('a/b/c')!='bobby/w/a/b/c':
+		return False
+	if sanitize_path('/a/b/..//c')!='/a/b/c':
+		return False
+	return True
 
 def encrypt_path(path):
 	"""
@@ -174,16 +194,66 @@ def test_encrypt_path():
 	# TODO...
 
 # any_path can be non-encrypted or encrypted
-def log_path(any_path):
-	"""
-	add a .log in front of the last part of path
-	"""
+def log_path(path):
+	# appens .log_ to begining of last part of the path
+	newpath=sanitize_path(path).split('/')
+	newpath[-1]='.log_'+newpath[-1]
+	return string.join(newpath,'/')
+
+def test_log_path():
+	if log_path('/a/b/c')=='/a/b/.log_c':
+		return True
+	else:
+		return False
 
 def write_secrets():
-	"""
-	mkdir dataDir, dataDir/user0 dataDir/user0/data
-	sym_enc(hash(passw), pickle(secrets)) > dataDir/user0/secrets
-	"""
+	# creates path for data/user/data and data/user/secrets if there is none, writes in new secrets, returns True or False if all operations succeeded
+	global client_user
+	global client_secrets
+	global client_passw
+	if client_passw==None:
+		return False
+	#creates paths for separate users, returns True or False
+	try:
+		if os.path.exists('data')==False:
+			os.mkdir('data')
+		pickled=pickle.dumps(client_secrets)
+		print crypt.sym_enc(client_passw, pickled)
+		enc_pickle=crypt.sym_enc(client_passw, pickled)[1]
+		if os.path.exists('data/'+client_user)==False:
+			os.mkdir('data/'+client_user)
+		if os.path.exists('data/'+client_user+'/data'):
+			os.mkdir('data/'+client_user+'/data')
+		
+		secret_file=open('data/'+client_user+'/secrets','w')
+		secret_file.write(enc_pickle)
+		secret_file.close()
+		ans=True
+	except:
+		ans=False
+	return ans
+	
+def test_write_secrets():
+	global client_working_dir
+	client_working_dir='bobby/w'
+	global client_secrets
+	client_secrest={'time':'boby'}
+	global client_user
+	client_user='bbbb'
+	global client_passw
+	client_passw=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
+	m=write_secrets()
+	if m==False:
+		return False
+	testFile=open('data/bbbb/secrets')
+	testString=testFile.read()
+	decrypted_pickled=crypt.sym_dec(client_passw, testString)
+	test=pickle.loads(decrypted_pickled)
+	print test
+	if test==client_secrets:
+		return True
+	else:
+		return False
 
 def update_keys():
 	"""
@@ -241,11 +311,46 @@ def get_log_path_on_disk(handle):
 
 # data is decrypted
 def parse_metadata_and_contents_for_file(data):
-	"""
-	metadata_map = {}
-	//insert checksum, CPK, edit_number
-	return (metadata_map, contents), None on failure
-	"""
+	#returns tuple of (metadata_map,contents) or None
+	try:
+		global WATERMARK
+		bp=0
+		watermark=data[0:len(WATERMARK)]
+		if watermark!=WATERMARK:
+			return None
+		bp+=len(watermark)
+		checkSum_Hex=data[bp:bp+10]
+		checkSum_len=int(checkSum_Hex,16)
+		bp+=10
+		checkSum=data[bp:bp+checkSum_len]
+		bp+=checkSum_len
+		CPK_Hex=data[bp:bp+10]
+		CPK_len=int(CPK_Hex,16)
+		bp+=10
+		CPK=data[bp:bp+CPK_len]
+		bp+=CPK_len
+		edit_number_Hex=data[bp:bp+10]
+		edit_number_len=int(edit_number_Hex,16)
+		bp+=10
+		edit_number=data[bp:bp+edit_number_len]
+		bp+=edit_number_len
+		contents_Hex=data[bp:bp+10]
+		contents_len=int(contents_Hex,16)
+		bp+=10
+		contents=data[bp:bp+contents_len]
+		metadata={'checksum':checkSum,'CPK':CPK,'edit_number':edit_number}
+		return (metadata,contents)
+	except:
+		return None
+		
+def test_parse_metadata_and_contents_for_file():
+	global WATERMARK
+	WATERMARK='HI there'
+	data='HI there0x00000002210x0000000120x0000000130x000000014'
+	if parse_metadata_and_contents_for_file(data)==({'checksum': '21', 'CPK': '2', 'edit_number': '3'}, '4'):
+		return True
+	else:
+		return False
 
 def parse_log_for_file(data):
 	"""
@@ -253,11 +358,45 @@ def parse_log_for_file(data):
 	"""
 
 def parse_metadata_for_dir(data):
-	"""
-	metadata_map = {}
-	//insert checksum, CPK, edit_number
-	return metadata_map,  None on failure
-	"""
+	#returns (metadata_map,contents) or None
+	try:
+		global WATERMARK
+		bp=0
+		watermark=data[0:len(WATERMARK)]
+		if watermark!=WATERMARK:
+			return None
+		bp+=len(watermark)
+		checkSum_Hex=data[bp:bp+10]
+		checkSum_len=int(checkSum_Hex,16)
+		bp+=10
+		checkSum=data[bp:bp+checkSum_len]
+		bp+=checkSum_len
+		CPK_Hex=data[bp:bp+10]
+		CPK_len=int(CPK_Hex,16)
+		bp+=10
+		CPK=data[bp:bp+CPK_len]
+		bp+=CPK_len
+		edit_number_Hex=data[bp:bp+10]
+		edit_number_len=int(edit_number_Hex,16)
+		bp+=10
+		edit_number=data[bp:bp+edit_number_len]
+		bp+=edit_number_len
+		contents_Hex=data[bp:bp+10]
+		contents_len=int(contents_Hex,16)
+		bp+=10
+		contents=data[bp:bp+contents_len]
+		metadata={'checksum':checkSum,'CPK':CPK,'edit_number':edit_number}
+		return (metadata,contents)
+	except:
+		return None
+	
+def test_parse_metadata_for_dir():
+	WATERMARK='HI there'
+	data='HI there0x00000002210x0000000120x0000000130x000000014'
+	if parse_metadata_for_dir(data)==({'checksum': '21', 'CPK': '2', 'edit_number': '3'}, '4'):
+		return True
+	else:
+		return False
 
 def parse_log_for_dir(data):
 	"""
@@ -476,25 +615,35 @@ def api_fopen(path, mode):
 	return handle
 	"""
 
-def api_fseek(handle, offset, whence):	#JOE
-	#return fseek(handle, offset, whence)
-	pass
+def api_fseek(handle, offset, whence=1):
+	return handle.seek(offset,whence)
 
-def api_ftell(handle):	#JOE
-	#return ftell(handle)
-	pass
+def api_ftell(handle):
+	return handle.tell()
 
-def api_fwrite(data, handle):	#JOE
-	#return handle.write(data, handle)
-	pass
+def api_fwrite(handle,data):
+	return handle.write(data)
 
-def api_fread(n, handle):	#JOE
-	#return fread(n, handle)
-	pass
+def api_fread(handle,n):
+	return handle.read(n)
 
-def api_fflush(handle):	#JOE
-	#return api_fflush_helper(handler, 0)
-	pass
+def api_fflush(handle):
+	return handle.flush()
+
+
+def test_fseek_ftell_fwrite_fread_fflush():
+	global client_open_files
+	data='n'
+	newfile=open('testingfile','w+')
+	api_fwrite(newfile,'this is a test of the fwrite function')
+	api_fflush(newfile)
+	api_fseek(newfile,0,0)
+	if api_fread(newfile,10)!='this is a ':
+		return False
+	if api_ftell(newfile)!=10:
+		return False
+	newfile.close()
+	return True
 
 def api_fflush_helper(handle, attempt_num):	#LEO???
 	"""
