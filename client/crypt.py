@@ -19,6 +19,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_PSS
 from pbkdf2 import PBKDF2
 import base64, random, string
+import binascii
 
 AES_BS = AES.block_size
 AES_IVS = AES.block_size
@@ -28,57 +29,75 @@ RSA_KEY_SIZE = 2048 #bits
 pad = lambda s: s + ((AES_BS - len(s) % AES_BS)) * chr(AES_BS - len(s) % AES_BS)
 unpad = lambda s: s[0:-ord(s[-1])]
 
+def bytesToStr(data):
+	return binascii.hexlify(data)
+	
+def strToBytes(string):
+	return binascii.unhexlify(string)
+
 def hash(str):
     h = SHA512.new()
     h.update(str)
-    return h.hexdigest()
+    return bytesToStr(h.hexdigest())
 
 def det(plaintext):
     pad_text = pad(plaintext)
     obj = AES.new(key, AES.MODE_ECB)
     ciphertext = obj.encrypt(pad_text)
-    return ciphertext
+    return bytesToStr(ciphertext)
 
 def create_sym_key(master_Key, label, context):
     #master_Key is derived from user password
     #label is filename or similar, context is username
     salt = '\00'.join([label, context, generate_salt()])
     sym_Key = PBKDF2(master_Key, salt).hexread(SYM_KEY_SIZE)
-    return (SYM_KEY_SIZE, sym_Key)
+    sym_Key = bytesToStr(sym_Key)
+    return (len(sym_Key), sym_Key)
 
 def create_asym_key_pair():
     key = RSA.generate(RSA_KEY_SIZE)
     priv_key = key.exportKey()
     pub_key = key.publickey().exportKey()
+    pub_key = bytesToStr(pub_key)
+    priv_key = bytesToStr(priv_key)
     return (len(pub_key), pub_key, len(priv_key), priv_key)
     
 def sym_enc(key, plaintext):
+    key = strToBytes(key)
     plaintext = pad(plaintext)
     iv = generate_iv()
     cipher = AES.new(key, AES.MODE_CBC, iv)
     ciphertext = (iv  + cipher.encrypt(plaintext))
+    ciphertext = bytesToStr(ciphertext)
     return (len(ciphertext), ciphertext)
 
 def sym_dec(key, ciphertext):
+    key = strToBytes(key)
+    ciphertext = strToBytes(ciphertext)
     iv = ciphertext[:AES_IVS]
     ciphertext = ciphertext[AES_IVS:]
     cipher = AES.new(key, AES.MODE_CBC, iv)
     return unpad(cipher.decrypt(ciphertext))
 
 def asym_enc(key, plaintext):
+    key = strToBytes(key)
     pub_key = RSA.importKey(key)
     cipher = PKCS1_OAEP.new(pub_key)
     ciphertext = cipher.encrypt(plaintext)
+    ciphertext = bytesToStr(ciphertext)
     return (len(ciphertext), ciphertext)
 
 
 def asym_dec(key, ciphertext):
+    key = strToBytes(key)
+    ciphertext = strToBytes(ciphertext)
     priv_key = RSA.importKey(key)
     cipher = PKCS1_OAEP.new(priv_key)
     plaintext = cipher.decrypt(ciphertext)
     return plaintext
 
 def generate_dig_sig(priv_key, plaintext):
+    priv_key = strToBytes(priv_key)
     #generates the digital signature for the contents of the encrypted file
     key = RSA.importKey(priv_key)
     h = SHA512.new()
@@ -88,6 +107,7 @@ def generate_dig_sig(priv_key, plaintext):
     return (len(signature), signature)
 
 def verify_dig_sig(pub_key, plaintext, signature):
+    pub_key = strToBytes(pub_key)
     #verifies that the contents of the encrypted file match the digital signature
     key = RSA.importKey(pub_key)
     h = SHA512.new()

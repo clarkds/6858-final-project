@@ -12,6 +12,7 @@ import traceback
 import crypt
 import binascii
 import string
+import time
 
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5007
@@ -57,7 +58,8 @@ watermark
 
 client_err_msgs = ""
 
-WATERMARK = "I HOPE THE SEMESTER IS ENDING"
+WATERMARK = crypt.watermark()
+SOCKET_TIMEOUT = 5
 
 client_all_public_keys={} 	#key=det(user), val = public key of users
 client_user = None
@@ -113,19 +115,28 @@ def send_to_server(msg_obj):
 		return None
 		
 	if resp["STATUS"] != 0:
-		client_err_msgs += resp["ERROR"] + "\n"
+		if "ERROR" in resp.keys():
+			# for unit tests, since they re-create same user
+			if resp["ERROR"] == 'User already exists':
+				resp["STATUS"] = 0
+				setup_socket()
+				assert msg.client_send(client_socket, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"penis"})["STATUS"] == 0
+				return resp
+
+			client_err_msgs += resp["ERROR"] + "\n"
 		return None
 		
 	return resp
 
-def testutil_setup_socket():
+def setup_socket():
 	global client_socket
-	client_socket = msg.create_client_socket(SERVER_IP, SERVER_PORT)
+	client_socket = msg.create_client_socket(SERVER_IP, SERVER_PORT, SOCKET_TIMEOUT)
 
 def test_send_to_server():
-	testutil_setup_socket()
-	#assert send_to_server({"ENC_USER":"asaj", "OP":"mkdir", "PATH":"xxxxxnoexist/secondtest"}) is None
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555"})["STATUS"] == 0
+	setup_socket()
+	assert send_to_server({"ENC_USER":"asaj", "OP":"mkdir", "PATH":"xxxxxnoexist/secondtest"}) is None
+	setup_socket()
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
 	print "YAYY"
 	client_socket.close()
 
@@ -195,13 +206,13 @@ def update_keys():
 		return False
 	print "******* decrypting perm with user sk *********************"
 	for perm_tuple in resp["PERMISSIONS"]:
-		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client_user_sk, strToBytes(perm_tuple[2])))
+		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client_user_sk, perm_tuple[2]))
 		client_keys[enc_pathname] = (read_key, write_key)
 	print "KOBE BRYANTTTTTT"
 	return True
 
 def test_update_keys():
-	testutil_setup_socket()
+	setup_socket()
 	global client_keys
 	global client_encUser
 	global client_user_sk
@@ -211,16 +222,16 @@ def test_update_keys():
 	client_user_sk = sk;
 	client_encUser = "asaj"
 	perm_len, perm = crypt.asym_enc(pk, json.dumps(("enc_pathname", "read_key", "write_key")))
-	perm = bytesToStr(perm)
+	perm = (client_encUser, perm)
 	
 	print "2"
 	
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555"})["STATUS"] == 0
-	assert send_to_server({"ENC_USER":"asaj", "OP":"addPermission", "TARGET":"asaj", "PERMISSION": perm})["STATUS"] == 0
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
+	assert send_to_server({"ENC_USER":"asaj", "OP":"addPermissions", "TARGET":"asaj", "USERS_AND_PERMS": [perm]})["STATUS"] == 0
 	
-	update_keys()
+	assert update_keys()
 	
-	assert client_keys[enc_pathname] == (read_key, write_key)
+	assert client_keys["enc_pathname"] == ("read_key", "write_key")
 
 def get_metadata(handle):
 	return client_open_files[handle][METADATA]

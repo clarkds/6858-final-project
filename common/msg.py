@@ -1,6 +1,7 @@
 import socket
 import json
 import sys
+import time
 
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5007
@@ -43,7 +44,16 @@ def client_send(s, msg_obj):
 	print "Received: " + str(msg_obj)
 	return msg_obj
 	
-def create_client_socket(server_ip, server_port):
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((server_ip, server_port))
+def create_client_socket(server_ip, server_port, timeoutSeconds):
+	success = False
+	startTime = time.time()
+	while not success and (time.time() - startTime < timeoutSeconds):
+		try:
+			s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			s.connect((server_ip, server_port))
+			success = True
+		except:
+			success = False
+			s = None
+			time.sleep(0.5)
 	return s
