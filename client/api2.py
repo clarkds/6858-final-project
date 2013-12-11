@@ -1121,7 +1121,7 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	for readers in old_readers_list:
 		if readers not in old_writers_list:
 			reader=readers
-			store=pickle.dumps((enc_path,old_read_key,None))
+			store=json.dumps((enc_path,old_read_key,None))
 			old_permissions.append((reader, crypt.sym_enc(client_public_keys[reader], store)))
 	
 			
@@ -1131,10 +1131,10 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 		old_permissions.append((writer,crypt.sym_enc(client_public_keys[writer], store)))
 	###old_permissions=json.dumps(old_permissions)
 	client_keys[path]=(new_rk, new_wk)
-	store = pickle.dumps((enc_path, new_rk, new_wk))
+	store = json.dumps((enc_path, new_rk, new_wk))
 	my_new_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser],store))
 	###my_new_perm=json.dumps(my_new_perm)
-	store = pickle.dumps((enc_path,old_read_key,old_write_key))
+	store = json.dumps((enc_path,old_read_key,old_write_key))
 	my_old_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser],store))
 	old_permissions.append(my_old_perm)
 	
@@ -1155,11 +1155,11 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	for readers in new_readers_list:
 		reader=readers
 		if readers not in new_writers_list:
-			store=pickle.dumps((enc_path,old_read_key,None))
+			store=json.dumps((enc_path,old_read_key,None))
 			new_permissions.append((reader, crypt.sym_enc(client_public_keys[readers], store)))
 	
 	for writers in new_writers_list:
-		store=pickle.dumps((enc_path,old_read_key,old_write_key))
+		store=json.dumps((enc_path,old_read_key,old_write_key))
 		writer=writers
 		new_permissions.append((writer,crypt.sym_enc(client_public_keys[writer], store)))
 
