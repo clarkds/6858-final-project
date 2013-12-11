@@ -7,12 +7,15 @@ class diff_log(list):
     """ class for the entire diff log of a file
     """
     
-    def __init__(self):
+    def __init__(self,csk=None,password=None):
         ## stores the file name, where it was created, owner of the file
         ## stores the diff_log of the file as an instance array of diff_obj
         list.__init__(self)
-        self.CSK = None      #checksum secret key
-        self.password = None #server password for write
+        self.csk = csk     #checksum secret key
+        self.password = password #server password for write
+        self.perm=[] #stores the permissions to the file
+        self.perm.append([])
+        self.perm.append([])
         
     def __len__(self):
         return list.__len__(self)
@@ -26,6 +29,15 @@ class diff_log(list):
         patches = dmp.patch_make(orig_file, diffs)
         text_patches = dmp.patch_toText(patches)
         return text_patches
+    
+    ## added these in to easily grab permissions of file from log file, using them in setPermissions
+    def update_secrets(self,csk,password):
+    	self.csk=csk
+    	self.password=password
+    	
+    def update_perm(self,readperm,writeperm):
+    	self.perm[0]=readperm
+    	self.perm[1]=writeperm
         
     def create_diff(self, user, user_SK, orig_file, mod_file = None, comments = None):
         new_diff = diff_obj()
