@@ -12,12 +12,16 @@ Asymmetric Encrption using PKCS1_OAEP with 2048bit RSA keys.
 Digital Signatures using  PKCS1_PSS using  2048bit RSA keys.
     The Digital signature is used in place of an HMAC as the checksum stored in the file.  
 """
+import os
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+parendir = parentdir + '/common'
+os.sys.path.insert(0,parentdir)
 
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Hash import HMAC, SHA512
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_PSS
-from pbkdf2 import PBKDF2
+from common.pbkdf2 import PBKDF2
 import base64, random, string
 import binascii
 

@@ -1,7 +1,8 @@
-import diff
+import diff_match_patch as diff
 import crypt
-from datetime import datetime
+import datetime
 
+    
     
 class diff_log(list):
     """ class for the entire diff log of a file
@@ -11,11 +12,6 @@ class diff_log(list):
         ## stores the file name, where it was created, owner of the file
         ## stores the diff_log of the file as an instance array of diff_obj
         list.__init__(self)
-        self.CSK = None      #checksum secret key
-        self.password = None #server password for write
-        
-    def __len__(self):
-        return list.__len__(self)
         
     def _generate_patch(self, orig_file, mod_file):
         #creates the patch for entry into the diff log.
@@ -30,8 +26,8 @@ class diff_log(list):
     def create_diff(self, user, user_SK, orig_file, mod_file = None, comments = None):
         new_diff = diff_obj()
         new_diff.user = user
-        new_diff.edit_number = list.__len__(self)
-        new_diff.comments = comments
+        new_diff.edit_number = self.len()
+        new_diff.comments = comments if comments != None
         if mod_file == None:
             new_diff.patch = self._generate_patch('', orig_file)
         else:
@@ -41,16 +37,14 @@ class diff_log(list):
         new_diff.freeze()
         self.append(new_diff)
         
-    def rebuild_file(self, index_number = None):
-        if index_number is None:
-            index_number =  (list.__len__(self))
-        file = ['',None]
+    def rebuild_file(self, index_number =  (self.len()-1)):
+        file = ''
         dmp = diff.diff_match_patch()
         dmp.Diff_Timeout = 0   #no timeout
         for i in range(index_number):
-            patch = dmp.patch_fromText(list.__getitem__(self,i).patch)
-            file = dmp.patch_apply(patch, file[0])
-        return file[0]
+            patch = dmp.patch_fromText(self._data[i])
+            file = dmp.patch_apply(patch, file)
+        return file
 
         
 class FrozenClass(object):
@@ -65,7 +59,7 @@ class FrozenClass(object):
     
 class diff_obj(FrozenClass):
     """ class for an diff entry into a log file, and the methods to create it
-    diff structure:  
+diff structure:  
     DET(username) + enc(user_sk, file_diff)
     file_diff = edit_number, timestamp, comments, patch
     """
@@ -79,7 +73,8 @@ class diff_obj(FrozenClass):
         self.patch = None
         
     def __str__(self):
-        return "User: {self.user} \n \
-            Edited: {self.timestamp} \n \
-            Edit number: {self.edit_number} \n \
-            Comments: {self.comments}".format(self=self)
+        return "{self.user} edited the file on {self.timestamp}
+           it was edit number: {self.edit_number}
+           comments: {self.comments}".format(self=self)
+           
+    
