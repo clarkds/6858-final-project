@@ -343,7 +343,7 @@ def read_permissions_list(handle): ### returns permissons of a file by reading t
 	global client_open_files
 	global client_keys
 	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff=crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
+	dec_diff=diff.read()#crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
 	diff.close()
 	diff_obj=parse_log(dec_diff)
 	if diff_obj==False:
@@ -361,7 +361,7 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 	global WATERMARK
 	global client_keys
 	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff=crypt.sym_dec(old_write_key,diff.read())
+	dec_diff=diff.read()#crypt.sym_dec(old_write_key,diff.read())
 	diff.close()
 	diff_obj=parse_log(dec_diff)
 	old_filepassw=diff_obj.password
@@ -372,7 +372,7 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 	pickled_diff=pickle.dumps(diff_obj)
 	
 	new_log=WATERMARK+hex_string(pickled_diff)+pickled_diff
-	new_log_file=crypt.sym_enc(client_keys[client_open_files[handle][ENC_PATH]][1],new_log)[1]
+	new_log_file=new_log#crypt.sym_enc(client_keys[client_open_files[handle][ENC_PATH]][1],new_log)[1]
 	
 	newdiff=open(client_open_files[handle][LOG_PATH_ON_DISK],'w')
 	newdiff.write(new_log_file)
@@ -408,7 +408,7 @@ def test_read_and_write_to_log():
 	testdif.update_perm(['hi'],['bye'])
 	store=pickle.dumps(testdif)
 	store_len=hex_string(store)
-	pickledtestdif=str(crypt.sym_enc(writesecret,WATERMARK+store_len+store)[1])
+	pickledtestdif=str(WATERMARK+store_len+store)
 	testing=open(disk_place,'w')
 	testing.write(pickledtestdif)
 	testing.close()
@@ -427,7 +427,60 @@ print test_read_and_write_to_log()
 	
 	
 	
+def api_fflush_helper(handle, attempt_num):	#LEO???
 
+	global client_keys
+	global client_loggedIn
+	global ENC_PATH
+	global METADATA
+	if client_loggedIn==False:
+		return 0
+	if attempt_num>1:
+		return 0
+	enc_path=client_open_files[handle][ENC_PATH]
+	enc_log_path=log_path(enc_path)
+	if client_keys[enc_path][1]==None:
+		return 0
+	success=handle.flush()
+	if success==0:	
+		return 0
+	api_fseek(handle,0,0)
+	
+	contents=api_fread(handle)
+	
+	#log
+	
+	####update_checksum(handle,
+	checksum=client_open_files[handle][METADATA]['checksum']
+	#contents=
+	#enc_file_data=crypt.
+	return True
+	"""
+	if attempt_num > 1:
+		return 0
+	enc_path = client_open_files[handle][ENC_PATH]
+	enc_log_path = log_path(enc_path)
+	if client_keys[enc_path][1] is None:
+		update_keys()
+		if client_keys[enc_path][1] is None:
+			return 0
+	success = fflush(handle)
+	if !success:
+		return 0
+	enc_file_data = create_enc_file_data(handle)
+	(enc_log_data, secret_number) = update_enc_log_data_and_get_secret(handle)
+	{
+		OP: "write_file",
+		ENC_USER: client_enc_user,
+		enc_file_path: enc_path,
+		enc_log_path: enc_log_path
+		"secret_number": secret_number}
+		enc_file_data: enc_file_data
+		enc_log_data: enc_log_data
+	}
+	if !success
+		recursive call (attempt_num+1)
+	"""
 
 
 
@@ -450,7 +503,7 @@ def randomword(length):
 
 
 
-def update_checksum(handle,csk,new_csk=None):
+def update_checksum(handle,csk):
 	if True:
 		global WATERMARK
 		global client_open_files
@@ -458,21 +511,9 @@ def update_checksum(handle,csk,new_csk=None):
 		hold_place=api_ftell(handle)
 		api_fseek(handle,0,0)
 		contents=api_fread(handle)
-		contents=contents[len(WATERMARK):]
-		old_checksum_len=int(contents[:10],16)
-		old_checksum=contents[10:10+old_checksum_len]
-	
-		if new_csk!=None:
-			contents=contents[10+old_checksum_len:]
-			new_checksum=create_checksum(client_open_files[handle][METADATA],contents,new_csk)
-			contents=hex_string(len(new_checksum))+new_checksum+contents
-		else:
-			contents=contents[10+old_checksum_len:]
-			new_checksum=create_checksum(client_open_files[METADATA],contents,csk)
-			contents=hex_string(len(new_checksum))+new_checksum+contents
-		api_fseek(handle,0,0)
-		api_fwrite(handle,contents)
-		api_fseek(handle,hold_place+len(new_checksum)-old_checksum_len,0)
+		new_checksum=create_checksum(client_open_files[METADATA],contents,csk)
+		client_open_files[handle][METADATA]['checksum']=new_checksum
+		api_fseek(handle,hold_place,0)
 		return True
 	else:
 		return False
@@ -487,7 +528,7 @@ def test_update_checksum():
 	new_csk=crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1]
 	testing.write('HI there0x00000002210x0000000120x0000000130x000000014')
 	client_open_files[testing]=[1,2,{'checksum':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'cpk':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'edit_number':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1]}]
-	print update_checksum(testing,csk,new_csk)
+	print update_checksum(testing,csk)
 	api_fseek(testing,0,0)
 	print api_fread(testing)
 	
