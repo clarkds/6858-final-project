@@ -13,7 +13,7 @@ import threading
 
 from msg import *
 from db import *
-
+from path import *
 
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5007
@@ -33,22 +33,6 @@ def read_file_contents(path):
 	contents = f.read()
 	f.close()
 	return contents
-
-def get_parent_directory(path):
-	sub_path = path.split('/')
-	sub_path = sub_path[0:len(sub_path) - 1]
-	sub_path = "/".join(sub_path)
-	return sub_path
-
-def get_metafile_path(path):
-	sub_path = get_parent_directory(path)
-	meta_path = sub_path + '/.meta_' + path.split('/')[-1]
-	return meta_path
-
-def get_logfile_path(path):
-	sub_path = get_parent_directory(path)
-	log_path = sub_path + '/.log_' + path.split('/')[-1]
-	return log_path
 
 def get_value_from_message(msg, key):
 	#TODO
