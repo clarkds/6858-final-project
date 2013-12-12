@@ -8,6 +8,8 @@ import difflog
 import sys
 import random
 
+client_export_files={}
+
 
 client_working_dir='bobby/w'
 client_secrets={'time':'boby'}
@@ -868,21 +870,40 @@ def test_api_mv():
 
 #### so we can edit in any way we want
 def export(handle,text_file):
+	global client_open_files
+	global client_export_files
 	api_fseek(handle,0,0)
 	contents=api_fread(handle)
 	temp=open(text_file,'w')
 	temp.write(contents)
 	temp.close()
-	return 1
+	found=False
+	numb=0
+	while found==False:
+		if numb not in client_export_files:
+			client_export_files[numb]=handle
+			found=True
+			break
+		else:
+			numb+=1
+	return numb
 	
-def import_and_flush(handle,text_file):
+def import_and_flush(number,text_file):
+	global client_export_files
 	temp=open(text_file,'r')
 	contents=temp.read()
 	temp.close()
+	handle=client_export_files[number]
 	api_fseek(handle,0,0)
 	api_fwrite(handle,contents)
 	api_fflush(handle)
+	del client_export_files[number]
 	return 1
+
+
+def test_import_and _export():
+	global client_open_files
+
 
 def dir_path(path):
 	newpath=newpath=sanitize_path(path).split('/')
