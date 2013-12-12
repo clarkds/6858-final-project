@@ -409,9 +409,9 @@ def test_update_keys():
 	print "1"
 	
 	
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":pub, "PARENT_SECRET":"00000"})["STATUS"] == 0
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":pub, "SECRET":"00000"})["STATUS"] == 0
 	
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createFile", "PATH":file_path, "PARENT_SECRET":"00000", "SECRET":"12345", "PARENT_LOG_DATA":"Added test.txt", "LOG_DATA":"Created"})["STATUS"] == 0
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createFile", "PATH":file_path, "PARENT_SECRET":"00000", "SECRET":"12345", "DATA":"Added test.txt", "LOG_DATA":"Created"})["STATUS"] == 0
 
 	assert send_to_server({"ENC_USER":"asaj", "OP":"addPermissions", "TARGET":"asaj", "USERS_AND_PERMS": [("asaj",perm)], "PATH":file_path, "SECRET":"12345", "LOG_DATA":"random_string"})["STATUS"] == 0
 	
@@ -699,7 +699,7 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 			traceback.print_exc()
 			return False
 	success = load_secrets()
-	if not success
+	if not success:
 		return False
 
 	success = setup_socket()
@@ -826,7 +826,7 @@ def api_fopen(path, mode):
 		log_path_on_disk = None
 
 	try:
-		if mode == "r"
+		if mode == "r":
 			handle = open(contents_path_on_disk, "r")
 		else: #mode == "w"
 			handle = open(contents_path_on_disk, "w+")
@@ -1027,7 +1027,6 @@ def api_fclose(handle):	# fclose
 	if not client_loggedIn:
 		raise Exception("not logged in")
 	
-	global client_loggedIn
 	global client_open_files
 	global MODE
 	if client_loggedIn==False:
@@ -1079,7 +1078,6 @@ def api_mkdir(parent, new_dir_name):
 	global client_user
 	global client_encUser
 	global WATERMARK
-	global client_loggedIn
 	if client_loggedIn==False:
 		return (0,'not logged in')
 	directory=dir_path(path)
@@ -1130,7 +1128,6 @@ def api_mv(old_path, new_path):
 	if not client_loggedIn:
 		raise Exception("not logged in")
 	
-	global client_loggedIn
 	global client_open_files
 	global METADATA
 	global LOG_PATH_ON_DISK
@@ -1166,7 +1163,6 @@ def api_rm(filename,parent_path=client_working_dir):
 	if not client_loggedIn:
 		raise Exception("not logged in")
 	
-	global client_loggedIn
 	global client_working_dir
 	global client_open_files
 	global LOG_PATH_ON_DISK
@@ -1366,7 +1362,6 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	
 	global client_user
 	global client_passw
-	global client_loggedIn
 	global client_public_keys
 	global client_keys
 	global client_encUser
@@ -1560,7 +1555,6 @@ def api_create_file(path):
 	global client_user
 	global client_encUser
 	global WATERMARK
-	global client_loggedIn
 	if client_loggedIn==False:
 		return (0,'not logged in')
 	directory=dir_path(path)
@@ -1611,4 +1605,4 @@ def api_create_file(path):
 #print 'testing createfile'
 #test_api_create_file()
  
-test_api_fopen()
+test_update_keys()
