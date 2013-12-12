@@ -82,28 +82,38 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 				if user_exists(msg_obj['TARGET']):
 					response['PERMISSIONS'] = get_permissions_shared_with(msg_obj['TARGET'])
 				else:
-					response['ERROR'] = "User does not exist"
+					response['ERROR'] = "User " + target + " does not exist"
 					response['STATUS'] = 1
 	
 			elif op == 'addPermissions':
-				if check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
-					for (target, perm) in msg_obj['USERS_AND_PERMS']:
-						if user_exists(target):
+				path = ('users' + msg_obj['PATH'])
+				log_file = get_logfile_path(path)
+				if os.path.exists(path):
+					if check_write_key(path, msg_obj['SECRET']):
+						for (target, perm) in msg_obj['USERS_AND_PERMS']:
 							add_permission(username, target, perm)
-						else:
-							response['ERROR'] = "User " + target + "does not exist"
-							response['STATUS'] = 1
-				else:
-						response['ERROR'] = "Incorrect secret for " + parent_dir
+						write_file_contents(log_file, msg_obj['LOG_DATA'])
+					else:
+						response['ERROR'] = "Incorrect secret for " + path
 						response['STATUS'] = 1
+				else:
+					response['ERROR'] = path + " does not exist"
+					response['STATUS'] = 1
 
 			elif op == 'deletePermissions':
-				for (target, perm) in msg_obj['USERS_AND_PERMS']:
-					if user_exists(target):
-						remove_permission(username, target, perm)
+				path = ('users' + msg_obj['PATH'])
+				log_file = get_logfile_path(path)
+				if os.path.exists(path):
+					if check_write_key(path, msg_obj['SECRET']):
+						for (target, perm) in msg_obj['USERS_AND_PERMS']:
+							remove_permission(username, target, perm)
+						write_file_contents(log_file, msg_obj['LOG_DATA'])
 					else:
-						response['ERROR'] = "User " + target + "does not exist"
+						response['ERROR'] = "Incorrect secret for " + path
 						response['STATUS'] = 1
+				else:
+					response['ERROR'] = path + " does not exist"
+					response['STATUS'] = 1
 
 			elif op == 'getPublicKey':
 				target = msg_obj['TARGET']
@@ -167,17 +177,26 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['ERROR'] = "Incorrect secret for " + path
 					response['STATUS'] = 1
 
-			elif op =='deleteFile':
+			elif op =='delete':
 				path = ('users' + msg_obj['PATH'])
 				parent_dir = get_parent_directory(path)
 				log_file = get_logfile_path(parent_dir)
-				if not (os.path.exists(path) and os.path.isfile(path)):
-					response['ERROR'] = "File " + path + " to delete does not exist"
+				if not os.path.exists(path):
+					response['ERROR'] = path + " to delete does not exist"
 					response['STATUS'] = 1	
 				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
-					write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
-					os.remove(path)
-					os.remove(get_logfile_path(path))
+					if os.path.isdir(path):
+						if len(os.listdir(path)) == 0:
+							write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
+							os.rmdir(path)
+							os.remove(get_logfile_path(path))
+						else:
+							response['ERROR'] = "Folder to delete not empty"
+							response['STATUS'] = 1
+					else:
+						write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
+						os.remove(path)
+						os.remove(get_logfile_path(path))
 				else:
 					response['ERROR'] = "Incorrect secret for " + parent_dir
 					response['STATUS'] = 1
@@ -211,24 +230,6 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['STATUS'] = 1
 
 	
-			elif op =='rmdir':
-				path = ('users' + msg_obj['PATH'])
-				parent_dir = get_parent_directory(path)
-				log_file = get_logfile_path(parent_dir)
-				if not (os.path.exists(path) and os.path.isdir(path)):
-					response['ERROR'] = "Folder to delete does not exist"
-					response['STATUS'] = 1
-				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
-					if len(os.listdir(path)) == 0:
-						os.rmdir(path)
-						os.remove(get_logfile_path(path))
-						write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
-					else:
-						response['ERROR'] = "Folder to delete not empty"
-						response['STATUS'] = 1
-				else:
-					response['ERROR'] = "Incorrect secret for " + parent_dir
-					response['STATUS'] = 1
 	
 			elif op =='ls':
 				path = ('users' + msg_obj['PATH'])
