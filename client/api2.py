@@ -577,12 +577,28 @@ def api_create_user(user, passw):	# LEO
 	(len_pk, user_pk, len_sk, user_sk) = crypt.create_asym_key_pair()
 	homedir_secret = randomword(SECRET_LEN)
 	setup_socket()
+	
+	secret=crypt.create_asym_key_pair()
+	new_read_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
+	new_write_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
+	fiepassw=randomword(40)
+	client.keys[enc_path]=(new_read_key,new_write_key)
+	store = pickle.dumps((crypt.det(client.user), new_read_key, new_write_key))
+	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
+	new_log=difflog.diff_log(secret[-1],filepassw)
+	new_log.update_perm([],[my_new_perm])
+	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+
+	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
+	checksum=create_checkSum(meta,'',secret[-1])
+	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
+	
 	resp = send_to_server({
 		"ENC_USER": crypt.det(user),
 		"OP": "createUser",
 		"PASSWORD": passw,
 		"KEY": user_pk,
-		"SECRET":homedir_secret})
+		"SECRET":homedir_secret, "HOME_DIR_METADATA_DATA":data,"HOME_DIR_LOG_DATA":enc_log})
 	if resp is None:
 		return False
 	client.secrets["user_pk"] = user_pk
