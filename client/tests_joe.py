@@ -901,9 +901,6 @@ def import_and_flush(number,text_file):
 	return 1
 
 
-def test_import_and _export():
-	global client_open_files
-
 
 def dir_path(path):
 	newpath=newpath=sanitize_path(path).split('/')

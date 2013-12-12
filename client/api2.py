@@ -622,6 +622,17 @@ def valid_user_pass(user, passw):
 	# allowed: alphanumeric + underscores and dashes
 	return re.match('^[\w_-]+$', user) and len(passw) >= 6
 
+def verify_file(file_handle, diff_log):
+  for i in diff_log:
+		if not verify_dig_sig(client_public_keys[client_encUser], i.patch, i.signature):
+			return False
+	api_fseek(file_handle,0,0)
+	if not verify_checksum(client_openfiles[file_handle][METADATA], api_fread(file_handle)):
+		return False
+	if not client_openfiles[file_handle][METADATA]["edit_number"] == diff_log[-1].edit_number:
+		return False
+	return True
+
 #~~~~~~~~~~~~~~~~~~~~~~~ API functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def api_get_err_log():
