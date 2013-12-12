@@ -623,7 +623,7 @@ def valid_user_pass(user, passw):
 	return re.match('^[\w_-]+$', user) and len(passw) >= 6
 
 def verify_file(file_handle, diff_log):
-  for i in diff_log:
+	for i in diff_log:
 		if not verify_dig_sig(client_public_keys[client_encUser], i.patch, i.signature):
 			return False
 	api_fseek(file_handle,0,0)
@@ -1615,5 +1615,3 @@ def api_create_file(path):
 #	print api_create_file('/a/b/c')
 #print 'testing createfile'
 #test_api_create_file()
- 
-test_update_keys()
