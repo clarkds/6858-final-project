@@ -601,6 +601,10 @@ def api_create_user(user, passw):	# LEO
 		"SECRET":homedir_secret, "HOME_DIR_METADATA_DATA":data,"HOME_DIR_LOG_DATA":enc_log})
 	if resp is None:
 		return False
+	new_message={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+	resp2 = send_to_server(new_message)
+	if resp2 is None:
+		return False
 	client.secrets["user_pk"] = user_pk
 	client.secrets["user_sk"] = user_sk
 	print client.secrets, "77777777"
