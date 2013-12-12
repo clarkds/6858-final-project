@@ -217,6 +217,15 @@ def test_sanitize_path():
 	return True
 
 def encrypt_path(path):
+	global client_path_key
+	
+	assert(path.startswith('/'))
+	try:
+		enc_path = client_path_key[path]
+		return enc_path
+	except:
+		return None
+		
 	"""
 	# THIS IS BE WRONG
 	assert(path.startswith('/'))
