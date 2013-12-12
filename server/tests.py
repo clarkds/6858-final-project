@@ -19,15 +19,17 @@ s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 def create_user_test():
 	s0.connect((SERVER_IP, SERVER_PORT))
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"addPermissions", "USERS_AND_PERMS":[("asaj", "11111"), ("asaj", "22222")]})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0] == ["asaj", "asaj", "11111"]
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][1] == ["asaj", "asaj", "22222"]
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPublicKey", "TARGET":"asaj"})["KEY"] == "55555"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"mkdir", "PATH":"/asaj/test", "PARENT_SECRET":"00000", "SECRET":"54321", "PARENT_LOG_DATA":"Added test dir", "LOG_DATA":"Created"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log.asaj"})["DATA"] == "Added test dir"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Created"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createFile", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "SECRET":"12345", "PARENT_LOG_DATA":"Added test.txt", "LOG_DATA":"Created"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log.test.txt"})["DATA"] == "Created"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"addPermissions", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "LOG_DATA":"Shared with asaj", "USERS_AND_PERMS":[("asaj", "11111"), ("asaj", "22222")]})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0] == ["asaj", "asaj", "11111"]
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][1] == ["asaj", "asaj", "22222"]
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"deletePermissions", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "LOG_DATA":"Unshared with asaj", "USERS_AND_PERMS":[("asaj", "11111")]})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0] == ["asaj", "asaj", "22222"]
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log.test.txt"})["DATA"] == "Unshared with asaj"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Added test.txt"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "FILE_DATA":"This is a test", "LOG_DATA":"Added this is a test"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/test.txt"})["DATA"] == "This is a test"
@@ -37,11 +39,11 @@ def create_user_test():
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"mkdir", "PATH":"/asaj/noexist/secondtest"})["STATUS"] == 1
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"ls", "PATH":"/asaj/test"})["FILES"] == ["test.txt"]
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"ls", "PATH":"/asaj/test"})["FOLDERS"] == ["secondtest"]
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"deleteFile", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "PARENT_LOG_DATA":"Deleted test.txt"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "PARENT_LOG_DATA":"Deleted test.txt"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Deleted test.txt"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"rmdir", "PATH":"/asaj/test/secondtest", "PARENT_SECRET":"54321", "PARENT_LOG_DATA":"Deleted secondtest"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test/secondtest", "PARENT_SECRET":"54321", "PARENT_LOG_DATA":"Deleted secondtest"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Deleted secondtest"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"rmdir", "PATH":"/asaj/test", "PARENT_SECRET":"00000", "PARENT_LOG_DATA":"Deleted test"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test", "PARENT_SECRET":"00000", "PARENT_LOG_DATA":"Deleted test"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log.asaj"})["DATA"] == "Deleted test"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"logoutUser"})["STATUS"] == 0
 	s0.close()
