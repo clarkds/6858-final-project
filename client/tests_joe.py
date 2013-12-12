@@ -7,6 +7,9 @@ import json
 import difflog
 import sys
 import random
+import api2
+
+print api2.client_secrets
 
 client_export_files={}
 
