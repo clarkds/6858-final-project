@@ -729,44 +729,63 @@ def api_fopen(path, mode):
 		raise Exception("not logged in")
 	
 	if mode != "r" and mode != "w":
+		print "invalid mode"
 		return False
 	path = sanitize_path(path)
 	contents_path_on_disk = "data" + path	#path has a leading slash
 
-	enc_path = encrypt_path(path)	
+	#enc_path = encrypt_path(path)	
+	enc_path = path	#TODO: swap these two lines
+
+	print "FOPEN:", path
+	print "FOPEN:", enc_path
+	print "FOPEN:", client.keys
 
 	if enc_path is None or enc_path not in client.keys:
 		update_keys()
+		#enc_path = encrypt_path(path)
+		enc_path = path	#TODO: swap these two lines
+		
+		print "after re-fetching permissions"
+		print "FOPEN:", path
+		print "FOPEN:", enc_path
+		print "FOPEN:", client.keys
+		
 		if enc_path is None or enc_path not in client.keys:
 			if mode == "r":
+				print "file does not exist, can't fopen with read mode"
 				return False
 			else:	#mode == "w"
 				return api_create_file(path)	
 	
 	# come back here
 	
-	enc_path = encrypt_path(path)
 	enc_log_path = log_path(enc_path)
 	
 	if mode == "w" and client.keys[enc_path][1] is None:
-		return 0
+		print "you don't have write access"
+		return False
 		
 	resp = send_to_server({
 		"ENC_USER": client.encUser,
 		"OP": "downloadFile",
 		"PATH": enc_path})
 	if resp is None:
+		print "downloadFile (actual file) failure"
 		return False
 		
 	data = crypt.sym_dec(client.keys[enc_path][0], resp["DATA"])
 	parsed = parse_metadata_and_contents_for_file(data)
 	if parsed is None:
+		print "parse metadata failed"
 		return False
 	(metadata_map, contents) = parsed
 	if not verify_checksum(metadata_map, contents):
+		print "verify checksum failed"
 		return False
 	success = save_file(contents, contents_path_on_disk)
 	if not success:
+		print "save actual file on disk failed"
 		return False
 
 	if client.keys[enc_path][1] is not None:
@@ -775,11 +794,13 @@ def api_fopen(path, mode):
 			"OP": "downloadFile",
 			"PATH": enc_log_path})
 		if resp is None:
+			print "downloadFile (log) failed"
 			return False
 		log_path_on_disk = log_path(contents_path_on_disk)
 		data = crypt.sym_dec(client.keys[enc_path][1], resp["DATA"])
 		success = save_file(resp["data"], log_path_on_disk)
 		if not success:
+			print "save log on disk failed"
 			return False
 	else:
 		log_path_on_disk = None
@@ -1064,7 +1085,8 @@ def api_opendir(path):
 		raise Exception("not logged in")
 	
 	meta=meta_path(path)
-	return api_fopen(meta, 'w+')
+	return api_fopen(meta, 'w')
+	# TODO: api_fopen should take a prefix that it adds in front of encrypted thingy
 
 
 def api_rm(filename,parent_path=client.working_dir):
