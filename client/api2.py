@@ -1310,7 +1310,12 @@ def import_and_flush(number,text_file):
 
 def test_import_and _export():
 	global client_open_files
-
+	
+def path_name(path):
+	newpath=newpath=sanitize_path(path).split('/')
+	name=newpath.pop(-1)
+	return name
+	
 	
 def api_create_file(path):
 	global client_open_files
