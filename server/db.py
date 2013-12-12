@@ -126,7 +126,7 @@ def get_public_key(username):
 
 def get_all_public_keys():
 	db = publickey_setup()
-	table_contents = db.query(PublicKey).filter(User.name != None).all()
+	table_contents = db.query(PublicKey).filter(PublicKey.username != None).all()
 	users_and_perms = [(i.username, i.key) for i in table_contents]
 	return users_and_perms 
 		

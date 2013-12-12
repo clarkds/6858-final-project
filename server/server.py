@@ -258,7 +258,7 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 					response['ERROR'] = 'User already exists'
 					response['STATUS'] = 1
 				else:
-					os.mkdir('users/' + username) 
+					# os.mkdir('users/' + username) 
 					# Create an entry in the public key table
 					password = msg_obj['PASSWORD']
 					public_key = msg_obj['KEY']
