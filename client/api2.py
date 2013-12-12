@@ -221,8 +221,14 @@ def test_sanitize_path():
 
 def encrypt_path(path):
 	global client_path_key
+	global client_user
+	global client_encUser
 	
 	assert(path.startswith('/'))
+	
+	if path == "/":
+		return "/"
+	
 	try:
 		enc_path = client_path_key[path]
 		return enc_path
@@ -293,20 +299,29 @@ def write_secrets():
 		return False
 	#creates paths for separate users, returns True or False
 	try:
+		print "*************"
 		if os.path.exists('data')==False:
 			os.mkdir('data')
+		print "*************"
+		print "!@#$!@$!@", client_secrets
 		pickled=pickle.dumps(client_secrets)
-		enc_pickle=crypt.sym_enc(client_passw, pickled)[1]
+		(len_passw_key, passw_key) = crypt.create_sym_key(client_passw, client_passw, client_passw, False)
+		enc_pickle=crypt.sym_enc(passw_key, pickled)[1]
+		print "*************"
 		if os.path.exists('data/'+client_user)==False:
 			os.mkdir('data/'+client_user)
+		print "*************"
 		if os.path.exists('data/'+client_user+'/data'):
 			os.mkdir('data/'+client_user+'/data')
+		print "*************"
 		
 		secret_file=open('data/'+client_user+'/secrets','w')
 		secret_file.write(enc_pickle)
 		secret_file.close()
+		print "*************"
 		ans=True
 	except:
+		traceback.print_exc()
 		ans=False
 	return ans
 	
@@ -318,12 +333,16 @@ def load_secrets():
 		global client_user
 		global client_secrets
 		global client_passw
+		
 		secret_file=open('data/'+client_user+'/secrets','r')
-		decrypted_pickle=crypt.sym_dec(client_passw, secre_file.read())
+		(len_passw_key, passw_key) = crypt.create_sym_key(client_passw, client_passw, client_passw, False)
+		decrypted_pickle=crypt.sym_dec(passw_key, secret_file.read())
 		client_secrets=pickle.loads(decrypted_pickle)
+		print client_secrets, "***"
 		secret_file.close()
 		return True
 	except:
+		traceback.print_exc()
 		return False
 
 
@@ -623,7 +642,7 @@ def valid_user_pass(user, passw):
 	return re.match('^[\w_-]+$', user) and len(passw) >= 6
 
 def verify_file(file_handle, diff_log):
-  for i in diff_log:
+	for i in diff_log:
 		if not verify_dig_sig(client_public_keys[client_encUser], i.patch, i.signature):
 			return False
 	api_fseek(file_handle,0,0)
@@ -659,12 +678,15 @@ def api_create_user(user, passw):	# LEO
 		"OP": "createUser",
 		"PASSWORD": passw,
 		"KEY": user_pk,
-		"PARENT_SECRET":homedir_secret})
+		"SECRET":homedir_secret})
 	if resp is None:
 		return False
 	client_secrets["user_pk"] = user_pk
 	client_secrets["user_sk"] = user_sk
-	write_secrets()
+	print client_secrets, "77777777"
+	success = write_secrets()
+	if not success:
+		return False
 	client_loggedIn = True
 	return True
 	
@@ -677,6 +699,9 @@ def test_api_create_user():
 	assert api_create_user("leo", "123456")
 	assert api_create_user("leo", "123456") == False
 	TESTING_ALLOW_RECREATE_USER = True
+	api_logout()
+	assert api_login("leo", "bad password") == False
+	assert api_login("leo", "123456")
 
 def api_login(user, passw, secretsFile=None):	# LEO
 	if api_login_helper(user, passw, secretsFile):
@@ -693,7 +718,7 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 	global client_secrets
 	global client_all_public_keys
 	global client_loggedIn
-	
+		
 	if not valid_user_pass(user, passw):
 		return False
 
@@ -702,21 +727,21 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 	client_working_dir = "/" + client_user
 	client_passw = passw
 	
-	write_secrets()	# call this to all the user directories on disk
 	if secretsFile is not None:
+		write_secrets()	# call this to create all the user directory + secret file
 		try:
-			shutil.copy(src, "data/"+client_user+"/secrets")
+			shutil.copy(secretsFile, "data/"+client_user+"/secrets")
 		except:
 			traceback.print_exc()
 			return False
+	
 	success = load_secrets()
 	if not success:
 		return False
-
 	success = setup_socket()
 	if not success:
 		return False
-
+	
 	resp = send_to_server({
 		"ENC_USER": client_encUser,
 		"OP": "loginUser",
@@ -776,7 +801,7 @@ def api_fopen(path, mode):
 	global client_loggedIn
 	if not client_loggedIn:
 		raise Exception("not logged in")
-
+	
 	global client_encUser
 	#global client_loggedIn
 	global client_keys
@@ -786,19 +811,23 @@ def api_fopen(path, mode):
 	
 	if mode != "r" and mode != "w":
 		return False
-	
 	path = sanitize_path(path)
-	enc_path = encrypt_path(path)	
-	enc_log_path = log_path(enc_path)
 	contents_path_on_disk = "data" + path	#path has a leading slash
 
-	if enc_path not in client_keys:
+	enc_path = encrypt_path(path)	
+
+	if enc_path is None or enc_path not in client_keys:
 		update_keys()
-		if enc_path not in client_keys:
+		if enc_path is None or enc_path not in client_keys:
 			if mode == "r":
 				return False
 			else:	#mode == "w"
 				return api_create_file(path)	
+	
+	# come back here
+	
+	enc_path = encrypt_path(path)
+	enc_log_path = log_path(enc_path)
 	
 	if mode == "w" and client_keys[enc_path][1] is None:
 		return 0
@@ -1089,8 +1118,6 @@ def api_mkdir(parent, new_dir_name):
 	global client_user
 	global client_encUser
 	global WATERMARK
-	if client_loggedIn==False:
-		return (0,'not logged in')
 	directory=dir_path(path)
 	path_filename=path_name(path)
 	enc_dir=encrypt_path(dir_path)
@@ -1566,11 +1593,13 @@ def api_create_file(path):
 	global client_user
 	global client_encUser
 	global WATERMARK
-	if client_loggedIn==False:
-		return (0,'not logged in')
 	directory=dir_path(path)
+	print directory
 	path_filename=path_name(path)
+	print path_filename
 	enc_dir=encrypt_path(directory)
+	print enc_dir
+	return "blah"
 	dir_handle=api_opendir(directory)
 	log_file=open(client_open_files[dir_handle][LOG_PATH_ON_DISK],'r')
 	data=log_file.read()
@@ -1616,4 +1645,7 @@ def api_create_file(path):
 #print 'testing createfile'
 #test_api_create_file()
  
-test_update_keys()
+#test_update_keys()
+
+if __name__ == "__main__":
+	test_api_create_user()

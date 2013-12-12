@@ -61,10 +61,10 @@ def det(plaintext):
 def create_sym_key(master_Key, label, context, use_salt = True):
     #master_Key is derived from user password
     #label is filename or similar, context is username
-	if use_salt:
-		salt = '\00'.join([label, context, generate_salt()])
-	else:
-		salt = '\00'.join([label, context])
+    if use_salt:
+        salt = '\00'.join([label, context, generate_salt()])
+    else:
+        salt = '\00'.join([label, context])
     sym_Key = PBKDF2(master_Key, salt).hexread(SYM_KEY_SIZE)
     sym_Key = bytesToStr(sym_Key)
     return (len(sym_Key), sym_Key)
