@@ -958,6 +958,7 @@ def api_mv(old_path, new_path):
 		
 def test_api_mv():
 	##cant test yet
+    pass
 
 def api_opendir(path):
 	meta=meta_path(path)
@@ -1349,3 +1350,4 @@ def test_api_create_file():
 print 'testing createfile'
 test_api_create_file()
 
+ 
