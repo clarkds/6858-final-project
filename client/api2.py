@@ -1200,6 +1200,7 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	global client_public_keys
 	global client_keys
 	global client_encUser
+	global client_open_files
 	
 	if client_loggedIn==False:
 		return (0,'not logged in')
@@ -1235,8 +1236,18 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	
 	new_filepassw=randomword(40)
 	(le,new_cpk,le2,new_csk)=crypt.create_asym_key_pair()
+	diff_old=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff_old=diff.read()#crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
+	enc_diff_old=crypt.sym_enc(client_keys[enc_path][1],dec_diff)
+	
+	
 	
 	change=write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key)
+	
+	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff=diff.read()#crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
+	enc_diff=crypt.sym_enc(client_keys[enc_path][1],dec_diff)
+	
 	if change==False:
 		return (0,'could not change permissions')
 	else:
@@ -1257,10 +1268,12 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 		store=pickle.dumps((enc_path,old_read_key,old_write_key))
 		writer=writers
 		new_permissions.append((writer,crypt.sym_enc(client_public_keys[writer], store)))
-
+	
+	
+	
 
 	if delete_my_permission==False:
-		new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+		new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm,"LOG_DATA":enc_diff_old,"SECRET":old_filepassw,"PATH":enc_path}
 		if send_to_server(new_message)==None:
 			return (0,'my new permission')
 			
@@ -1271,11 +1284,11 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	if api_fflush(handle)==None:
 		return (0,'flushing log')
 		
-	removed_perm={"ENC_USER":client_encUser, "OP":"deletePermissions", "USERS_AND_PERMS":old_permissions}
+	removed_perm={"ENC_USER":client_encUser, "OP":"deletePermissions", "USERS_AND_PERMS":old_permissions,"LOG_DATA":enc_diff,"SECRET":new_filepassw,"PATH":enc_path}
 	if send_to_server(removed_perm)==None:
 		return (0,'revoking permissions')
 
-	added_perm={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":new_permissions}
+	added_perm={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":new_permissions,"LOG_DATA":enc_diff,"SECRET":new_filepassw,"PATH":enc_path}
 	if send_to_server(added_perm)==None:
 		return (0,'adding new permissions')
 
