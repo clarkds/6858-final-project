@@ -102,7 +102,7 @@ def add_permission(username, target, permission):
 
 def remove_permission(username, target, permission):
 	db = permission_setup()
-	permission = db.query(Permission).filter(Permission.username == username, Permission.target == target, Permission.permission == permission).all()
+	permissions = db.query(Permission).filter(Permission.username == username, Permission.target == target, Permission.permission == permission).delete()
 	db.commit()
 
 def get_permissions_shared_by(username):
