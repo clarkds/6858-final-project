@@ -991,7 +991,7 @@ def api_rm(filename,parent_path=client_working_dir):
 	filepassw=diff_obj.password
 	if api_set_permissions(sanitize_path(meta_path(path)), meta, [], [],True)==False:
 		return (0,'could not set permissions')
-	message={"ENC_USER":client_encUser, "OP":"deleteFile", "PARENT_SECRET":old_filepassw,"PARENT_LOG_DATA":new_filepassw}
+	message={"ENC_USER":client_encUser, "OP":"Delete", "PARENT_SECRET":old_filepassw,"PARENT_LOG_DATA":new_filepassw}
 	if send_to_server(message)==None:
 		return False
 	return True
@@ -1371,6 +1371,7 @@ def api_create_file(path):
 def test_api_create_file():
 	#need api_fopen to test
 	print api_create_file('/a/b/c')
+
 print 'testing createfile'
 test_api_create_file()
 
