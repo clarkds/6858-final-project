@@ -164,7 +164,7 @@ def send_to_server(msg_obj):
 				if TESTING_ALLOW_RECREATE_USER and resp["ERROR"] == 'User already exists':
 					resp["STATUS"] = 0
 					setup_socket()
-					assert msg.client_send(client_socket, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"penis"})["STATUS"] == 0
+					assert msg.client_send(client_socket, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"test"})["STATUS"] == 0
 					return resp
 
 			client_err_msgs += resp["ERROR"] + "\n"
@@ -357,25 +357,29 @@ def update_keys():
 		return False
 	print "******* decrypting perm with user sk *********************"
 	for perm_tuple in resp["PERMISSIONS"]:
+		#print perm_tuple[2]
 		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client_secrets["user_sk"], perm_tuple[2]))
+		#print enc_pathname,read_key,write_key
 		client_keys[enc_pathname] = (read_key, write_key)
 	print "KOBE BRYANTTTTTT"
 	enc_path_list = client_keys.keys()
-	enc_path_list = [i.split('/') for i in enc_path_list]
+	
+	enc_path_list = [i.split('/')[1:] for i in enc_path_list]
 	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))
-
+	
 	for enc_path in enc_path_list:
 		path = []
-		full_enc_path = string.join(enc_path, '/')
+		full_enc_path = '/' + string.join(enc_path, '/')
 		if len(enc_path) == 2:
 			path.append(enc_path[0])
-			name = crypt.sym_dec(client_keys[full_enc_path],enc_path[1])
+			name = crypt.sym_dec(client_keys[full_enc_path][0],enc_path[1])
 			path.append(name)
 		else:
 			path.append(client_path_key[string.join(enc_path[:-1],'/')])
-			name = crypt.sym_Dec(client_keys[full_enc_path], enc_path[-1])
+			name = crypt.sym_Dec(client_keys[full_enc_path][0], enc_path[-1])
 			path.append(name)
-		full_path = string.join(path, '/')
+		full_path = '/' + string.join(path, '/')
+		
 		client_path_key[full_path] = full_enc_path
 		client_enc_path_key[full_enc_path] = full_path
 		
@@ -384,24 +388,40 @@ def update_keys():
 def test_update_keys():
 	setup_socket()
 	global client_keys
+	global client_user
 	global client_encUser
 	global client_secrets
 	
+	client_user = "asaj"
+	client_encUser = 'asaj'
+	
+	(len_key, key) = crypt.create_sym_key("test","test.txt","asaj")
+	(len_pub,pub,len_priv, priv) = crypt.create_asym_key_pair()
+	enc_file = crypt.sym_enc(key, "test.txt")[1]
+	client_keys[enc_file] = (key,key)
+	client_secrets["user_sk"] = priv
+	
+	file_path = "/asaj/" + enc_file
+	perm = crypt.asym_enc(pub, (json.dumps((file_path,key,key))))[1]
 	print "1"
-	(len_pk, pk, len_sk, sk) = crypt.create_asym_key_pair()
-	client_secrets["user_sk"] = sk;
-	client_encUser = "asaj"
-	perm_len, perm = crypt.asym_enc(pk, json.dumps(("enc_pathname", "read_key", "write_key")))
-	perm = (client_encUser, perm)
 	
-	print "2"
 	
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
-	assert send_to_server({"ENC_USER":"asaj", "OP":"addPermissions", "TARGET":"asaj", "USERS_AND_PERMS": [perm]})["STATUS"] == 0
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":pub, "PARENT_SECRET":"00000"})["STATUS"] == 0
 	
+	assert send_to_server({"ENC_USER":"asaj", "OP":"createFile", "PATH":file_path, "PARENT_SECRET":"00000", "SECRET":"12345", "PARENT_LOG_DATA":"Added test.txt", "LOG_DATA":"Created"})["STATUS"] == 0
+
+	assert send_to_server({"ENC_USER":"asaj", "OP":"addPermissions", "TARGET":"asaj", "USERS_AND_PERMS": [("asaj",perm)], "PATH":file_path, "SECRET":"12345", "LOG_DATA":"random_string"})["STATUS"] == 0
+	
+	print "everything sent to server"
+	print "calling update_keys()"
 	assert update_keys()
-	
-	assert client_keys["enc_pathname"] == ("read_key", "write_key")
+	print "checking client keys"
+	assert client_keys[file_path] == (key,key)
+	print "checking path mapping"
+	for key,value in client_path_key.iteritems():
+		print key,value
+	for key,value in client_enc_path_key.iteritems():
+		print key,value
 
 def get_metadata(handle):
 	return client_open_files[handle][METADATA]
@@ -998,7 +1018,7 @@ def api_mv(old_path, new_path):
 	if api_rm(handle1)!=1:
 		return (0,'rm failed')
 		
-def test_api_mv():
+#def test_api_mv():
 	##cant test yet
 
 def api_opendir(path):
@@ -1200,7 +1220,6 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	global client_public_keys
 	global client_keys
 	global client_encUser
-	global client_open_files
 	
 	if client_loggedIn==False:
 		return (0,'not logged in')
@@ -1236,18 +1255,8 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	
 	new_filepassw=randomword(40)
 	(le,new_cpk,le2,new_csk)=crypt.create_asym_key_pair()
-	diff_old=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff_old=diff.read()#crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
-	enc_diff_old=crypt.sym_enc(client_keys[enc_path][1],dec_diff)
-	
-	
 	
 	change=write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key)
-	
-	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff=diff.read()#crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
-	enc_diff=crypt.sym_enc(client_keys[enc_path][1],dec_diff)
-	
 	if change==False:
 		return (0,'could not change permissions')
 	else:
@@ -1268,12 +1277,10 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 		store=pickle.dumps((enc_path,old_read_key,old_write_key))
 		writer=writers
 		new_permissions.append((writer,crypt.sym_enc(client_public_keys[writer], store)))
-	
-	
-	
+
 
 	if delete_my_permission==False:
-		new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm,"LOG_DATA":enc_diff_old,"SECRET":old_filepassw,"PATH":enc_path}
+		new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
 		if send_to_server(new_message)==None:
 			return (0,'my new permission')
 			
@@ -1284,11 +1291,11 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	if api_fflush(handle)==None:
 		return (0,'flushing log')
 		
-	removed_perm={"ENC_USER":client_encUser, "OP":"deletePermissions", "USERS_AND_PERMS":old_permissions,"LOG_DATA":enc_diff,"SECRET":new_filepassw,"PATH":enc_path}
+	removed_perm={"ENC_USER":client_encUser, "OP":"deletePermissions", "USERS_AND_PERMS":old_permissions}
 	if send_to_server(removed_perm)==None:
 		return (0,'revoking permissions')
 
-	added_perm={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":new_permissions,"LOG_DATA":enc_diff,"SECRET":new_filepassw,"PATH":enc_path}
+	added_perm={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":new_permissions}
 	if send_to_server(added_perm)==None:
 		return (0,'adding new permissions')
 
@@ -1371,7 +1378,7 @@ def import_and_flush(number,text_file):
 	return 1
 
 
-def test_import_and _export():
+def test_import_and_export():
 	global client_open_files
 	
 def path_name(path):
@@ -1435,6 +1442,6 @@ def test_api_create_file():
 	#need api_fopen to test
 	print api_create_file('/a/b/c')
 
-print 'testing createfile'
-test_api_create_file()
+print 'testing update keys'
+test_update_keys()
 
