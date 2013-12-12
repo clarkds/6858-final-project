@@ -43,18 +43,18 @@ getAllPublicKeys:
 	response
 		USERS_AND_KEYS
 
-setPublicKey:
+setPublicKey: #sets the public key of a user to the Key in the publicKeys table
 	request
 		KEY
 	response
 
-downloadFile:
+downloadFile: #returns a file from the server
 	request
 		PATH
 	response
 		DATA
 
-createFile:
+createFile: #creates a new file on the server
 	request
 		PATH
 		PARENT_SECRET
@@ -63,7 +63,7 @@ createFile:
 		LOG_DATA
 	response
 
-writeFile:
+writeFile: #writes a file to the server
 	request
 		PATH
 		SECRET
@@ -71,14 +71,14 @@ writeFile:
 		FILE_DATA
 	response
 
-delete:
+delete:  #deletes a file or directory if the directory is empty
 	request
 		PATH
 		PARENT_SECRET
 		PARENT_LOG_DATA
 	response
 
-changeFileSecret:
+changeFileSecret:  #changes the secret written in the logFil: This is used to verify that a client has permission to write to a file, logfile, or change permissions
 	request
 		PATH
 		SECRET

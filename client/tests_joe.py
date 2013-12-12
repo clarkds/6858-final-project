@@ -963,8 +963,9 @@ def api_create_file(path):
 	new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
 	if send_to_server(new_message)==None:
 		return (0,'my new permission')	
-	
 	return api_fopen(path)
+
+
 	
 def test_api_create_file():
 	#need api_fopen to test
