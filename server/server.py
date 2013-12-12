@@ -40,9 +40,14 @@ def get_parent_directory(path):
 	sub_path = "/".join(sub_path)
 	return sub_path
 
+def get_metafile_path(path):
+	sub_path = get_parent_directory(path)
+	meta_path = sub_path + '/.meta_' + path.split('/')[-1]
+	return meta_path
+
 def get_logfile_path(path):
 	sub_path = get_parent_directory(path)
-	log_path = sub_path + '/.log.' + path.split('/')[-1]
+	log_path = sub_path + '/.log_' + path.split('/')[-1]
 	return log_path
 
 def get_value_from_message(msg, key):
@@ -135,7 +140,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 				if os.path.exists(path) and os.path.isfile(path):
 					response['DATA'] = read_file_contents(path)
 				else:
-					response['ERROR'] = "Folder " + path + " does not exist"
+					response['ERROR'] = path + " does not exist"
 					response['STATUS'] = 1
 
 	
@@ -146,7 +151,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 			elif op =='createFile':
 				path = ('users' + msg_obj['PATH'])
 				parent_dir = get_parent_directory(path)
-				log_file = get_logfile_path(parent_dir)
+				log_file = get_logfile_path(path)
 				if os.path.exists(path):
 					response['ERROR'] = "Folder or file " + path + " already exists"
 					response['STATUS'] = 1
@@ -154,15 +159,12 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['ERROR'] = "Parent dir " + parent_dir + " does not exist, cannot create " + path
 					response['STATUS'] = 1
 				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
-					open(path, 'a').close()
-					os.utime(path, None)
-					write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
-					write_file_contents(get_logfile_path(path), msg_obj['LOG_DATA'])
+					write_file_contents(log_file, msg_obj['LOG_DATA'])
+					write_file_contents(path, msg_obj['DATA'])
 					add_write_key(path, msg_obj['SECRET'])
 				else:
 					response['ERROR'] = "Incorrect secret for " + parent_dir
 					response['STATUS'] = 1
-
 
 			elif op =='writeFile':
 				path = ('users' + msg_obj['PATH'])
@@ -213,7 +215,8 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 			elif op =='mkdir':
 				path = ('users' + msg_obj['PATH'])
 				parent_dir = get_parent_directory(path)
-				log_file = get_logfile_path(parent_dir)
+				meta_file = get_metafile_path(path)
+				log_file = get_logfile_path(meta_file)
 				if os.path.exists(path):
 					response['ERROR'] = "Folder or file " + path + " already exists"
 					response['STATUS'] = 1
@@ -221,16 +224,14 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['ERROR'] = "Sub path " + parent_dir + " does not exist, cannot create " + path
 					response['STATUS'] = 1
 				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
-					write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
-					write_file_contents(get_logfile_path(path), msg_obj['LOG_DATA'])
+					write_file_contents(log_file, msg_obj['LOG_DATA'])
+					write_file_contents(meta_file, msg_obj['META_DATA'])
 					add_write_key(path, msg_obj['SECRET'])
 					os.mkdir(path)
 				else:
 					response['ERROR'] = "Incorrect secret for " + parent_dir
 					response['STATUS'] = 1
 
-	
-	
 			elif op =='ls':
 				path = ('users' + msg_obj['PATH'])
 				if os.path.exists(path) and os.path.isdir:
@@ -278,7 +279,7 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 					password = msg_obj['PASSWORD']
 					public_key = msg_obj['KEY']
 					add_user_to_databases(username, password, public_key)	
-					add_write_key("users/" + username, msg_obj["PARENT_SECRET"])
+					add_write_key("users/" + username, msg_obj["SECRET"])
 					active_users[username] = (True, client_address)
 					verified = True
 

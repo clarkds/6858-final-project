@@ -1,0 +1,102 @@
+All requests contain OP and ENC_USER, all responses contain OP, STATUS, and ERROR
+
+createUser
+	request
+		PASSWORD
+		SECRET
+		KEY
+	response
+
+loginUser
+	request
+		PASSWORD
+	response
+
+logoutUser
+	request
+	response
+		
+getPermissions:
+	request
+		TARGET 
+	response
+		PERMISSIONS
+		
+addPermissions:
+	request
+		PATH
+		SECRET
+		LOG_DATA
+		USERS_AND_PERMS
+	response
+
+deletePermissions:
+	request
+		PATH
+		SECRET
+		LOG_DATA
+		USERS_AND_PERMS
+	response
+
+getAllPublicKeys:
+	request
+	response
+		USERS_AND_KEYS
+
+setPublicKey:
+	request
+		KEY
+	response
+
+downloadFile:
+	request
+		PATH
+	response
+		DATA
+
+createFile:
+	request
+		PATH
+		PARENT_SECRET
+		SECRET
+		DATA
+		LOG_DATA
+	response
+
+writeFile:
+	request
+		PATH
+		SECRET
+		LOG_DATA
+		FILE_DATA
+	response
+
+delete:
+	request
+		PATH
+		PARENT_SECRET
+		PARENT_LOG_DATA
+	response
+
+changeFileSecret:
+	request
+		PATH
+		SECRET
+		NEW_SECRET
+	response
+
+mkdir:
+	request
+		PATH
+		PARENT_SECRET
+		SECRET
+		META_DATA
+		LOG_DATA
+	response
+
+ls:
+	request
+		PATH
+	response
+		FILES
+		FOLDERS
