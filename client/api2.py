@@ -17,6 +17,7 @@ import re
 import difflog
 import pickle
 import random
+import shutil
 
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5007
@@ -76,7 +77,8 @@ client_encUser = None
 client_passw = None
 client_working_dir = None
 client_secrets = {}
-client_loggedIn = False		#True or False. all functions throw an exception if not client_loggedIn
+#TODO: change loggedIn to false
+client_loggedIn = True		#True or False. all functions throw an exception if not client_loggedIn
 client_keys = {}			#key = enc_path, val = (file_RK, file_WK)
 client_path_key = {}
 client_enc_path_key = {}
@@ -113,7 +115,7 @@ def reset_client_vars():
 	client_passw = None
 	client_working_dir = None
 	client_secrets = {}
-	client_loggedIn = False
+	client_loggedIn = True	#TODO: change loggedin to false
 	client_keys = {}
 	client_path_key = {}
 	client_enc_path_key = {}
@@ -180,6 +182,7 @@ def setup_socket():
 		except:
 			pass
 	client_socket = msg.create_client_socket(SERVER_IP, SERVER_PORT, SOCKET_TIMEOUT)
+	return (client_socket is not None)
 
 def test_send_to_server():
 	setup_socket()
@@ -192,7 +195,7 @@ def test_send_to_server():
 
 def sanitize_path(path):
 # returns clean string of path. If path doesn't start with a /, prefixes global path to beginning of string or eror
-
+	print path, "*****"
 	global client_working_dir
 	if path[0]!='/' and client_working_dir!=None:
 		path=client_working_dir+'/'+path
@@ -488,7 +491,7 @@ def test_hex_string():
 	if hex_string(w)!='0x00000043':
 		return False
 	return True
-print test_hex_string()
+#print test_hex_string()
 
 def parse_log(data):
 	#returns datalog object
@@ -629,6 +632,7 @@ def api_create_user(user, passw):	# LEO
 	global client_user
 	global client_secrets
 	global client_passw
+	global client_loggedIn
 	
 	if not valid_user_pass(user, passw):
 		return False
@@ -650,6 +654,7 @@ def api_create_user(user, passw):	# LEO
 	client_secrets["user_pk"] = user_pk
 	client_secrets["user_sk"] = user_sk
 	write_secrets()
+	client_loggedIn = True
 	return True
 	
 def test_api_create_user():
@@ -676,6 +681,7 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 	global client_passw
 	global client_secrets
 	global client_all_public_keys
+	global client_loggedIn
 	
 	if not valid_user_pass(user, passw):
 		return False
@@ -684,6 +690,47 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 	client_encUser = crypt.det(user)
 	client_working_dir = "/" + client_user
 	client_passw = passw
+	
+	write_secrets()	# call this to all the user directories on disk
+	if secretsFile is not None:
+		try:
+			shutil.copy(src, "data/"+client_user+"/secrets")
+		except:
+			traceback.print_exc()
+			return False
+	success = load_secrets()
+	if not success
+		return False
+
+	success = setup_socket()
+	if not success:
+		return False
+
+	resp = send_to_server({
+		"ENC_USER": client_encUser,
+		"OP": "loginUser",
+		"PASSWORD": client_passw})
+	if resp is None:
+		return False
+
+	resp = send_to_server({
+		"ENC_USER": client_encUser,
+		"OP": "getAllPublicKeys",
+		"PASSWORD": client_passw})
+	if resp is None:
+		return False
+
+	client_all_public_keys = {}
+	for userAndKey in resp["USERS_AND_KEYS"]:
+		client_all_public_keys[userAndKey[0]] = userAndKey[1]
+
+	if client_secrets["user_pk"] != client_all_public_keys[client_encUser]:
+		return False
+	
+	if not update_keys():	#TODO: re-fetch public keys during updateKey (use lines above)
+		return False
+	
+	client_loggedIn = True
 
 	return True
 	
@@ -692,120 +739,147 @@ def test_api_login():
 	assert api_login("leo", "123456")
 
 def api_logout(keepfiles=False):	# logout
-	#TODO: close all open files
-	#TODO: if !keepfiles, remove dataDir/user/data
+	global client_loggedIn
+	global client_open_files
+	global client_user
+	
+	for handle in client_open_files.keys():
+		try:
+			handle.close()
+		except:
+			pass
+	if not keepfiles:
+		try:
+			shutil.rmtree("data/" + client_user + "/data")
+		except:
+			pass
 	reset_client_vars()
+	client_loggedIn = False	# TODO: take this out after fixing reset_client_vars()
+
+def test_api_fopen():
+	pass
+	assert not api_fopen("/leo/leo", "r")
 
 # mode = "r|w"
 def api_fopen(path, mode):
-	"""
-	path = sanitize_path(path)
-	enc_path = encrypt_path(path)
-	enc_log_path = log_path(enc_path)
-	contents_path_on_disk =dataDir/data + path
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+
+	global client_encUser
+	#global client_loggedIn
+	global client_keys
+	global client_open_files
 	
+	#here
+	
+	if mode != "r" and mode != "w":
+		return False
+	
+	path = sanitize_path(path)
+	enc_path = encrypt_path(path)	
+	enc_log_path = log_path(enc_path)
+	contents_path_on_disk = "data" + path	#path has a leading slash
+
 	if enc_path not in client_keys:
 		update_keys()
 		if enc_path not in client_keys:
-			return 0
-	if mode =='w' and enc_path not in  client_keys:
-		update_keys()
-		if enc_path not in client_keys:
-			cpk,csk=create_asym_key_pair()
-			edit_number=rand
-			checksum=asym_enc(csk, hash(''))
-			metadata_map={}
-			success = save_file("", contents_path_on_disk)	
-			if !success:
-				return 0
-			log_path_on_disk = log_path(contents_path_on_disk)
-			metadata_map["checksum"] = checksum
-			metadata_map["cpk"] = cpk
-			metadata_map["edit_number"] = edit_number			
-			metadata_map["secret_number"] = secret_number
-
-			success = save_file(, log_path_on_disk)
-			if !success:
-				return 0
-			dir_handle = api_opendir(dir_path(path))
-			if dir_handle == 0:
-				return 0
-			
-			
-			
-			handle = open(contents_path_on_disk, mode)
-			if handle == 0:
-				return 0
-			old_handle=open(original_path(contents_path_on_disk),mode)
-			if old_handle ==0:
-				return 0
-			client_open_files[handle] = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, original_path(contents_path_on_disk),mode)
-			return handle
-			
-	elif mode == "w" and client_keys[enc_path][1] is None:
-		return 0
-	else:
-		passw
+			if mode == "r":
+				return False
+			else:	#mode == "w"
+				return api_create_file(path)	
 	
-	{OP: "downloadFile", ENC_USER: client_encUser, filepath: enc_filepath}
-	{OP: "ack", STATUS: 0 on success, data: string}
-	if status != 0:
+	if mode == "w" and client_keys[enc_path][1] is None:
 		return 0
-	
-	data = sym_dec(client_keys[path][0], data)
+		
+	resp = send_to_server({
+		"ENC_USER": client_encUser,
+		"OP": "downloadFile",
+		"PATH": enc_path})
+	if resp is None:
+		return False
+		
+	data = crypt.sym_dec(client_keys[enc_path][0], resp["DATA"])
 	parsed = parse_metadata_and_contents_for_file(data)
 	if parsed is None:
-		return 0
+		return False
 	(metadata_map, contents) = parsed
-	
 	if not verify_checksum(metadata_map, contents):
-		return 0
-	
-	success = save_file(contents, contents_path_on_disk)	
-	if !success:
-		return 0
+		return False
+	success = save_file(contents, contents_path_on_disk)
+	if not success:
+		return False
 
 	if client_keys[enc_path][1] is not None:
-		{OP: "downloadFile", ENC_USER: client_encUser, filepath: enc_log_path }
-		{OP: "ack", STATUS: 0 on success, data: string}
-		if status != 0:
-			return 0
+		resp = send_to_server({
+			"ENC_USER": client_encUser,
+			"OP": "downloadFile",
+			"PATH": enc_log_path})
+		if resp is None:
+			return False
 		log_path_on_disk = log_path(contents_path_on_disk)
-		success = save_file(data, log_path_on_disk)
-		if !success:
-			return 0
+		data = crypt.sym_dec(client_keys[enc_path][1], resp["DATA"])
+		success = save_file(resp["data"], log_path_on_disk)
+		if not success:
+			return False
 	else:
 		log_path_on_disk = None
 
-	handle = open(contents_path_on_disk, mode)
-	if handle == 0:
-		return 0
-	oldhandle=open(original_path(contents_path_on_disk),mode)
-	if oldhandle==0:
-		return 0
+	try:
+		if mode == "r"
+			handle = open(contents_path_on_disk, "r")
+		else: #mode == "w"
+			handle = open(contents_path_on_disk, "w+")
+	except:
+		traceback.print_exc()
+		return False
+
+	try:
+		shutil.copy(contents_path_on_disk, original_path(contents_path_on_disk))
+	except:
+		traceback.print_exc()
+		return False
+
 	client_open_files[handle] = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, original_path(contents_path_on_disk), mode)
 
 	return handle
-	"""
-
-
 
 def api_fseek(handle, offset, whence=1):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	return handle.seek(offset,whence)
 
 def api_ftell(handle):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	return handle.tell()
 
 def api_fwrite(handle,data):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	return handle.write(data)
 	
 def api_fread(handle,n=None):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	if n==None:
 		return handle.read()
 	else:
 		return handle.read(n)
 
 def api_fflush(handle):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	handle.flush()
 	return api_fflush_helper(handle,0)
 
@@ -825,7 +899,6 @@ def test_fseek_ftell_fwrite_fread_fflush():
 	return True
 
 def api_fflush_helper(handle, attempt_num):	#LEO???
-
 	global client_keys
 	global client_loggedIn
 	global ENC_PATH
@@ -951,6 +1024,10 @@ def test_api_fflush_helper():
 
 def api_fclose(handle):	# fclose
 	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
+	global client_loggedIn
 	global client_open_files
 	global MODE
 	if client_loggedIn==False:
@@ -973,6 +1050,10 @@ def test_api_fclose():
 		return True
 
 def api_chdir(path):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	global client_working_dir
 	
 	spec_split = path.split('../')
@@ -987,19 +1068,68 @@ def api_chdir(path):
 
 
 def api_mkdir(parent, new_dir_name):
-	"""
-	//filename does not have ".." or slashes
-	//make sure new_dir_name contains no slashes
-	handle=api_opendir(parent,'w')
-	api_fseek(handle) to end
-	api_fwrite(handle, "mkdir new_dir_name\n")
-	//fflush this
-	//tell server to mkdir with secret_number
-	api_fclose(handle)
-	"""
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
+	global client_open_files
+	global LOG_PATH_ON_DISK
+	global client_keys
+	global client_password
+	global client_user
+	global client_encUser
+	global WATERMARK
+	global client_loggedIn
+	if client_loggedIn==False:
+		return (0,'not logged in')
+	directory=dir_path(path)
+	path_filename=path_name(path)
+	enc_dir=encrypt_path(dir_path)
+	dir_handle=api_opendir(dir_path)
+	log_file=open(client_open_files[dir_handle][LOG_PATH_ON_DISK],'r')
+	data=log_file.read()
+	diff_obj=parse_log(data)
+	parent_secret=diff_obj.password
+	api_fread(dir_handle)
+	api_fwrite(dir_handle,'\n add'+path_filename+'\n')
+	api_fflush(dir_handle)
+	
+	#Create filepassw
+	filepassw=randomword(40)
+	#create csk and cpk
+	secret=crypt.create_asym_key_pair()
+	#create read and write key
+	new_read_key=crypt.create_sym_key(crypt.hash(client_password), path_filename, directory)[1]
+	new_write_key=crypt.create_sym_key(crypt.hash(client_password), path_filename, directory)[1]
+	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
+	
+	enc_path=encrypt_path(directory)+enc_filename
+	client_keys[enc_path]=(new_read_key,new_write_key)
+	store = pickle.dumps((enc_path, new_read_key, new_write_key))
+	my_new_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser],store))
+	new_log=difflog.diff_log(secret[-1],filepassw)
+	new_log.update_perm([],[my_new_perm])
+	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+
+	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
+	checksum=create_checkSum(meta,'',secret[-1])
+	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
+	create_msg={"ENC_USER":client_encUser, "OP":"mkDir", "PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
+	if send_to_server(create_msg)==None:
+		return (0,'could not create file')
+	send_perm={}
+	new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+	if send_to_server(new_message)==None:
+		return (0,'my new permission')	
+	
+	return api_fopen(path)
 
 # can only move a single file at the time ->
 def api_mv(old_path, new_path):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	global client_loggedIn
 	global client_open_files
 	global METADATA
@@ -1020,13 +1150,22 @@ def api_mv(old_path, new_path):
 		
 #def test_api_mv():
 	##cant test yet
+	pass
 
 def api_opendir(path):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	meta=meta_path(path)
 	return api_fopen(meta, 'w+')
 
 
 def api_rm(filename,parent_path=client_working_dir):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	global client_loggedIn
 	global client_working_dir
 	global client_open_files
@@ -1064,6 +1203,10 @@ def test_api_rm():
 	
 
 def api_list_dir(path):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	enc_path = encrypted_path(path)
 	list_directory = {"ENC_USER":client_encUser, "OP":"ls", "PATH":enc_path}
 	response = send_to_server(list_directory)
@@ -1088,13 +1231,16 @@ def api_list_dir(path):
 	return directory_contents
 
 def api_closedir(handle):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	#api_fclose(handle)
 	pass
 
 
 
 def read_permissions_list(handle): ### returns permissons of a file by reading the log of the file
-
 	LOG_PATH_ON_DISK=4
 	ENC_PATH=1
 	global client_open_files
@@ -1214,6 +1360,10 @@ def test_update_checksum():
 #test_api_login()
 
 def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_my_permission=False):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	global client_user
 	global client_passw
 	global client_loggedIn
@@ -1255,8 +1405,14 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	
 	new_filepassw=randomword(40)
 	(le,new_cpk,le2,new_csk)=crypt.create_asym_key_pair()
-	
+	diff_old=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff_old=diff.read()#crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
+	enc_diff_old=crypt.sym_enc(client_keys[enc_path][1],dec_diff)
 	change=write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key)
+	
+	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff=diff.read()#crypt.sym_dec(client_keys[client_open_files[handle][ENC_PATH]][1],diff.read())
+	enc_diff=crypt.sym_enc(client_keys[enc_path][1],dec_diff)
 	if change==False:
 		return (0,'could not change permissions')
 	else:
@@ -1302,6 +1458,10 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	return 1
 
 def api_list_permissions(handle):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+
 	return read_permissions_list(handle)
 
 def test_set_perms():
@@ -1382,12 +1542,17 @@ def test_import_and_export():
 	global client_open_files
 	
 def path_name(path):
+	print path, "****"
 	newpath=newpath=sanitize_path(path).split('/')
 	name=newpath.pop(-1)
 	return name
 	
 	
 def api_create_file(path):
+	global client_loggedIn
+	if not client_loggedIn:
+		raise Exception("not logged in")
+	
 	global client_open_files
 	global LOG_PATH_ON_DISK
 	global client_keys
@@ -1395,11 +1560,13 @@ def api_create_file(path):
 	global client_user
 	global client_encUser
 	global WATERMARK
-	
+	global client_loggedIn
+	if client_loggedIn==False:
+		return (0,'not logged in')
 	directory=dir_path(path)
 	path_filename=path_name(path)
-	enc_dir=encrypt_path(dir_path)
-	dir_handle=api_opendir(dir_path)
+	enc_dir=encrypt_path(directory)
+	dir_handle=api_opendir(directory)
 	log_file=open(client_open_files[dir_handle][LOG_PATH_ON_DISK],'r')
 	data=log_file.read()
 	diff_obj=parse_log(data)
@@ -1438,10 +1605,10 @@ def api_create_file(path):
 	
 	return api_fopen(path)
 	
-def test_api_create_file():
-	#need api_fopen to test
-	print api_create_file('/a/b/c')
-
-print 'testing update keys'
-test_update_keys()
-
+#def test_api_create_file():
+#	#need api_fopen to test
+#	print api_create_file('/a/b/c')
+#print 'testing createfile'
+#test_api_create_file()
+ 
+test_api_fopen()

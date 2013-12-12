@@ -1,0 +1,102 @@
+All requests contain OP and ENC_USER, all responses contain OP, STATUS, and ERROR
+
+createUser
+	request
+		PASSWORD
+		SECRET
+		KEY
+	response
+
+loginUser
+	request
+		PASSWORD
+	response
+
+logoutUser
+	request
+	response
+		
+getPermissions:
+	request
+		TARGET 
+	response
+		PERMISSIONS
+		
+addPermissions:
+	request
+		PATH
+		SECRET
+		LOG_DATA
+		USERS_AND_PERMS
+	response
+
+deletePermissions:
+	request
+		PATH
+		SECRET
+		LOG_DATA
+		USERS_AND_PERMS
+	response
+
+getAllPublicKeys:
+	request
+	response
+		USERS_AND_KEYS
+
+setPublicKey: #sets the public key of a user to the Key in the publicKeys table
+	request
+		KEY
+	response
+
+downloadFile: #returns a file from the server
+	request
+		PATH
+	response
+		DATA
+
+createFile: #creates a new file on the server
+	request
+		PATH
+		PARENT_SECRET
+		SECRET
+		DATA
+		LOG_DATA
+	response
+
+writeFile: #writes a file to the server
+	request
+		PATH
+		SECRET
+		LOG_DATA
+		FILE_DATA
+	response
+
+delete:  #deletes a file or directory if the directory is empty
+	request
+		PATH
+		PARENT_SECRET
+		PARENT_LOG_DATA
+	response
+
+changeFileSecret:  #changes the secret written in the logFil: This is used to verify that a client has permission to write to a file, logfile, or change permissions
+	request
+		PATH
+		SECRET
+		NEW_SECRET
+	response
+
+mkdir:
+	request
+		PATH
+		PARENT_SECRET
+		SECRET
+		META_DATA
+		LOG_DATA
+	response
+
+ls:
+	request
+		PATH
+	response
+		FILES
+		FOLDERS
