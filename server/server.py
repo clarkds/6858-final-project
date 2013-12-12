@@ -253,19 +253,25 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 		try:
 			username = msg_obj['ENC_USER']
 			if op == 'createUser':
-				# Create a directory for the new user
-				if os.path.exists('users/' + username) or user_exists(username):
-					response['ERROR'] = 'User already exists'
+				if "HOME_DIR_METADATA_DATA" not in msg_obj.keys() or "HOME_DIR_LOG_DATA" not in msg_obj.keys():
+					response['ERROR'] = 'missing HOME_DIR_METADATA_DATA or HOME_DIR_LOG_DATA fields'
 					response['STATUS'] = 1
 				else:
-					# os.mkdir('users/' + username) 
-					# Create an entry in the public key table
-					password = msg_obj['PASSWORD']
-					public_key = msg_obj['KEY']
-					add_user_to_databases(username, password, public_key)	
-					add_write_key("users/" + username, msg_obj["SECRET"])
-					active_users[username] = (True, client_address)
-					verified = True
+					# Create a directory for the new user
+					if os.path.exists('users/' + username) or user_exists(username):
+						response['ERROR'] = 'User already exists'
+						response['STATUS'] = 1
+					else:
+						os.mkdir('users/' + username) 
+						write_file_contents("users/.meta_"+username, msg_obj["HOME_DIR_METADATA_DATA"])
+						write_file_contents("users/.log_"+username, msg_obj["HOME_DIR_LOG_DATA"])
+						# Create an entry in the public key table
+						password = msg_obj['PASSWORD']
+						public_key = msg_obj['KEY']
+						add_user_to_databases(username, password, public_key)	
+						add_write_key("users/" + username, msg_obj["SECRET"])
+						active_users[username] = (True, client_address)
+						verified = True
 
 			elif op =='loginUser':
 				#TODO: logging in twice should log the old user out?

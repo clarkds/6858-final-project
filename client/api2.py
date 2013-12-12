@@ -112,8 +112,8 @@ def send_to_server(msg_obj):
 		print "-------------------"
 		traceback.print_exc()
 		print "--------------------"
-		client_err_msgs += "exception when sending " + json.dumps(msg_obj) + "\n"
-		client_err_msgs += str(e)
+		client.err_msgs += "exception when sending " + json.dumps(msg_obj) + "\n"
+		client.err_msgs += str(e)
 		api_logout()
 		return None
 		
@@ -127,7 +127,7 @@ def send_to_server(msg_obj):
 					assert msg.client_send(client.socket, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"test"})["STATUS"] == 0
 					return resp
 
-			client_err_msgs += resp["ERROR"] + "\n"
+			client.err_msgs += resp["ERROR"] + "\n"
 		return None
 		
 	return resp
@@ -303,18 +303,24 @@ def update_keys():
 	print "KOBE BRYANTTTTTT"
 	enc_path_list = client.keys.keys()
 	
+	for key, val in client.keys.iteritems():
+		print "***", key, val
+	
 	enc_path_list = [i.split('/')[1:] for i in enc_path_list]
 	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))
 	
 	for enc_path in enc_path_list:
+		print enc_path
 		path = []
 		full_enc_path = '/' + string.join(enc_path, '/')
-		if len(enc_path) == 2:
+		if len(enc_path) == 1:
+			path.append(enc_path[0])
+		elif len(enc_path) == 2:
 			path.append(enc_path[0])
 			name = crypt.sym_dec(client.keys[full_enc_path][0],enc_path[1])
 			path.append(name)
 		else:
-			path.append(client.path_key[string.join(enc_path[:-1],'/')])
+			path.append(client.path_key["/" + string.join(enc_path[:-1],'/')])
 			name = crypt.sym_Dec(client.keys[full_enc_path][0], enc_path[-1])
 			path.append(name)
 		full_path = '/' + string.join(path, '/')
@@ -563,7 +569,7 @@ def verify_file(file_handle, diff_log):
 #~~~~~~~~~~~~~~~~~~~~~~~ API functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def api_get_err_log():
-	return client_err_msgs
+	return client.err_msgs
 
 def api_create_user(user, passw):	# LEO
 	api_logout()
@@ -572,6 +578,7 @@ def api_create_user(user, passw):	# LEO
 		return False
 	
 	client.user = user
+	client.encUser = crypt.det(client.user)
 	client.passw = passw
 	
 	(len_pk, user_pk, len_sk, user_sk) = crypt.create_asym_key_pair()
@@ -579,29 +586,36 @@ def api_create_user(user, passw):	# LEO
 	setup_socket()
 	
 	secret=crypt.create_asym_key_pair()
-	new_read_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
-	new_write_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
-	fiepassw=randomword(40)
-	client.keys[enc_path]=(new_read_key,new_write_key)
-	store = pickle.dumps((crypt.det(client.user), new_read_key, new_write_key))
-	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
+	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), crypt.det(client.user), '/')[1]
+	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), crypt.det(client.user), '/')[1]
+	filepassw=randomword(40)
+	client.keys['/'+crypt.det(user)]=(new_read_key,new_write_key)
+	store = json.dumps((crypt.det(client.user), new_read_key, new_write_key))
+	my_new_perm  = ("/" + client.encUser, crypt.asym_enc(user_pk,store)[1])
 	new_log=difflog.diff_log(secret[-1],filepassw)
 	new_log.update_perm([],[my_new_perm])
-	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))[1]
 
 	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
-	checksum=create_checkSum(meta,'',secret[-1])
-	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
+	checksum=create_checksum(meta,'',secret[-1])[1]
+	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')[1]
 	
 	resp = send_to_server({
 		"ENC_USER": crypt.det(user),
 		"OP": "createUser",
 		"PASSWORD": passw,
 		"KEY": user_pk,
-		"SECRET":homedir_secret, "HOME_DIR_METADATA_DATA":data,"HOME_DIR_LOG_DATA":enc_log})
+		"SECRET":filepassw, "HOME_DIR_METADATA_DATA":data,"HOME_DIR_LOG_DATA":enc_log})
 	if resp is None:
 		return False
-	new_message={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+	new_message={
+		"ENC_USER":client.encUser,
+		"OP":"addPermissions",
+		"USERS_AND_PERMS":[my_new_perm],
+		"PATH": "/" + crypt.det(client.user),
+		"SECRET": filepassw,
+		"LOG_DATA": enc_log
+	}
 	resp2 = send_to_server(new_message)
 	if resp2 is None:
 		return False
@@ -611,7 +625,7 @@ def api_create_user(user, passw):	# LEO
 	success = write_secrets()
 	if not success:
 		return False
-	client.loggedIn = True
+	api_logout()
 	return True
 	
 def test_api_create_user():
@@ -627,6 +641,7 @@ def test_api_create_user():
 	assert api_login("leo", "123456")
 
 def api_login(user, passw, secretsFile=None):	# LEO
+	api_logout()
 	if api_login_helper(user, passw, secretsFile):
 		return True
 	else:
@@ -996,8 +1011,8 @@ def api_mkdir(parent, new_dir_name):
 	#create csk and cpk
 	secret=crypt.create_asym_key_pair()
 	#create read and write key
-	new_read_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
-	new_write_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
+	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
+	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
 	
 	enc_path=encrypt_path(directory)+enc_filename
@@ -1428,8 +1443,8 @@ def api_create_file(path):
 	#create csk and cpk
 	secret=crypt.create_asym_key_pair()
 	#create read and write key
-	new_read_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
-	new_write_key=crypt.create_sym_key(crypt.hash(client.password), path_filename, directory)[1]
+	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
+	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
 	
 	enc_path=encrypt_path(directory)+enc_filename
