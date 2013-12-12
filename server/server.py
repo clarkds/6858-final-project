@@ -44,6 +44,12 @@ def get_logfile_path(path):
 	sub_path = get_parent_directory(path)
 	log_path = sub_path + '/.log.' + path.split('/')[-1]
 	return log_path
+
+def get_value_from_message(msg, key):
+	#TODO
+	success = True
+	error = None
+	return (success, msg[key], error)
 	
 class MyTCPHandler(SocketServer.BaseRequestHandler):
 	def handle(self):
@@ -80,11 +86,15 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['STATUS'] = 1
 	
 			elif op == 'addPermissions':
-				for (target, perm) in msg_obj['USERS_AND_PERMS']:
-					if user_exists(target):
-						add_permission(username, target, perm)
-					else:
-						response['ERROR'] = "User " + target + "does not exist"
+				if check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
+					for (target, perm) in msg_obj['USERS_AND_PERMS']:
+						if user_exists(target):
+							add_permission(username, target, perm)
+						else:
+							response['ERROR'] = "User " + target + "does not exist"
+							response['STATUS'] = 1
+				else:
+						response['ERROR'] = "Incorrect secret for " + parent_dir
 						response['STATUS'] = 1
 
 			elif op == 'deletePermissions':
@@ -139,6 +149,10 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					write_file_contents(log_file, msg_obj['PARENT_LOG_DATA'])
 					write_file_contents(get_logfile_path(path), msg_obj['LOG_DATA'])
 					add_write_key(path, msg_obj['SECRET'])
+				else:
+					response['ERROR'] = "Incorrect secret for " + parent_dir
+					response['STATUS'] = 1
+
 
 			elif op =='writeFile':
 				path = ('users' + msg_obj['PATH'])
@@ -168,6 +182,15 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['ERROR'] = "Incorrect secret for " + parent_dir
 					response['STATUS'] = 1
 
+			elif op == 'changeFileSecret':
+				path = ('users' + msg_obj['PATH'])
+				if not os.path.exists(path):
+					response['ERROR'] = "Folder or file " + path + " does not exist"
+					response['STATUS'] = 1
+				elif not update_write_key(path, msg_obj["SECRET"], msg_obj["NEW_SECRET"]):
+					response['ERROR'] = "Incorrect secret for " + path
+					response['STATUS'] = 1
+					
 			elif op =='mkdir':
 				path = ('users' + msg_obj['PATH'])
 				parent_dir = get_parent_directory(path)
