@@ -743,7 +743,214 @@ def test_set_perms():
 	print api_set_permissions(otherfile, m, ['sally'], ['tommy'],False)
 test_set_perms()
 	
-#"""
-#	mkdir dataDir, dataDir/user0 dataDir/user0/data
-#	sym_enc(hash(passw), pickle(secrets)) > dataDir/user0/secrets
-#	"""
+
+def meta_path(path):
+	# appens .log_ to begining of last part of the path
+	newpath=sanitize_path(path).split('/')
+	newpath[-1]='.meta_'+newpath[-1]
+	return string.join(newpath,'/')
+
+def test_meta_path():
+	if log_path('/a/b/c')=='/a/b/.meta_c':
+		return True
+	else:
+		return False
+
+def api_opendir(path):
+	meta=meta_path(path)
+	return api_fopen(meta, 'w+')
+	
+	
+def api_rm(filename,parent_path=client_working_dir):
+	global client_working_dir
+	global client_open_files
+	global LOG_PATH_ON_DISK
+	global CONTENTS_PATH_ON_DISK
+	parent_path=sanitize_path(parent_path)
+	meta=api_opendir(parent_path)
+	totalpath=parent_path+filename
+	check=False
+	for m in client_open_files:
+		if m[CONTENTS_PATH_ON_DISK]==totalpath:
+			check=True
+	if check==True:
+		return (0,'file cannot be removed because it is open')
+	api_fread(meta)
+	api_fwrite(meta,'\nrm filename\n')
+	api_fflush(meta)
+	log_file=open(client_open_files[meta][LOG_PATH_ON_DISK],'r')
+	log_data=log_file.read()
+	diff_obj=parse_log(log_data)
+	filepassw=diff_obj.password
+	if api_set_permissions(sanitize_path(meta_path(path)), meta, [], [],True)==False:
+		return (0,'could not set permissions')
+	message={"ENC_USER":client_encUser, "OP":"deleteFile", "PARENT_SECRET":old_filepassw,"PARENT_LOG_DATA":new_filepassw}
+	if send_to_server(message)==None:
+		return False
+	return True
+	
+	
+def test_api_rm():
+	###Can't be tested untill fopen is created
+	print api_rm('boby','a/b/c')	
+	
+print 'testing api_rm'
+#test_api_rm()
+
+
+
+def api_fclose(handle):	# fclose
+	global client_loggedIn
+	global client_open_files
+	global MODE
+	if client_loggedIn==False:
+		return (0,'client not logged int')
+	if client_open_files[handle][MODE]=='w+':
+		if api_fflush(handle)==0:
+			return (0,'couldnt flush')
+	del client_open_files[handle]
+	return handle.close()
+
+def test_api_fclose():
+	global client_open_files
+	m=open('testing2','w+')
+	client_open_files[m]=[1,2,3,4,5,6,7]
+	print api_fclose(m)
+	try:
+		print client_open_files[m]
+		return 'doesnt work!'
+	except:
+		return True
+
+
+### createfile creates file, saves it as empty file, closes it, then returns
+
+
+# can only move a single file at the time ->
+def api_mv(old_path, new_path):
+	global client_loggedIn
+	global client_open_files
+	global METADATA
+	global LOG_PATH_ON_DISK
+	global CONTENTS_PATH_ON_DISK
+	if client_loggedIn==False:
+		return (0,'client not logged in')
+	handle1=api_open(old_parent,'w+')
+	handle2=api_open(new_path,'w+')
+	contents=api_fread(handle1)
+	client_open_files[handle2][METADATA]=client_open_files[handle1][METADATA]
+	client_open_files[handle2][LOG_PATH_ON_DISK]=client_open_files[handle1][LOG_PATH_ON_DISK]
+	client_open_files[handle2][CONTENTS_PATH_ON_DISK]=client_open_files[handle1][CONTENTS_PATH_ON_DISK]
+	if api_fflush(handle2)!=1:
+		return (0,'flush failed')
+	if api_rm(handle1)!=1:
+		return (0,'rm failed')
+		
+def test_api_mv():
+	##cant test yet
+	
+	
+	"""
+	//filename does not have ".." or slashes -> use sanitize_path()
+	handle1 = api_fopen(old_parent)
+	return 0 if handle1 == 0
+	handle2 = api_fopen(new_parent)
+	return 0 if handle2 == 0
+	fwrite(handle1, "mv old_parent/old_filename to new_parent/new_filename")
+	fwrite(handle2, "mv old_parent/old_filename to new_parent/new_filename")
+	fflush(handle1)
+	fflush(handle2)
+	tell server to do the mv (with secret number)
+	fclose(handle1)
+	fclose(handle2)
+	recursive set perms using api_ls and a queue
+	"""
+
+#### so we can edit in any way we want
+def export(handle,text_file):
+	api_fseek(handle,0,0)
+	contents=api_fread(handle)
+	temp=open(text_file,'w')
+	temp.write(contents)
+	temp.close()
+	return 1
+	
+def import_and_flush(handle,text_file):
+	temp=open(text_file,'r')
+	contents=temp.read()
+	temp.close()
+	api_fseek(handle,0,0)
+	api_fwrite(handle,contents)
+	api_fflush(handle)
+	return 1
+
+def dir_path(path):
+	newpath=newpath=sanitize_path(path).split('/')
+	newpath.pop(-1)
+	return string.join(newpath,'/')
+
+def path_name(path):
+	newpath=newpath=sanitize_path(path).split('/')
+	name=newpath.pop(-1)
+	return name
+	
+def api_create_file(path):
+	global client_open_files
+	global LOG_PATH_ON_DISK
+	global client_keys
+	global client_password
+	global client_user
+	global client_encUser
+	global WATERMARK
+	
+	directory=dir_path(path)
+	path_filename=path_name(path)
+	enc_dir=encrypt_path(dir_path)
+	dir_handle=api_opendir(dir_path)
+	log_file=open(client_open_files[dir_handle][LOG_PATH_ON_DISK],'r')
+	data=log_file.read()
+	diff_obj=parse_log(data)
+	parent_secret=diff_obj.password
+	api_fread(dir_handle)
+	api_fwrite(dir_handle,'\n add'+path_filename+'\n')
+	api_fflush(dir_handle)
+	
+	#Create filepassw
+	filepassw=randomword(40)
+	#create csk and cpk
+	secret=crypt.create_asym_key_pair()
+	#create read and write key
+	new_read_key=crypt.create_sym_key(crypt.hash(client_password), path_filename, directory)[1]
+	new_write_key=crypt.create_sym_key(crypt.hash(client_password), path_filename, directory)[1]
+	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
+	
+	enc_path=encrypt_path(directory)+enc_filename
+	client_keys[enc_path]=(new_read_key,new_write_key)
+	store = pickle.dumps((enc_path, new_read_key, new_write_key))
+	my_new_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser],store))
+	new_log=difflog.diff_log(secret[-1],filepassw)
+	new_log.update_perm([],[my_new_perm])
+	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+
+	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
+	checksum=create_checkSum(meta,'',secret[-1])
+	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
+	create_msg={"ENC_USER":client_encUser, "OP":"createFile", "PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
+	if send_to_server(create_msg)==None:
+		return (0,'could not create file')
+	send_perm={}
+	new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+	if send_to_server(new_message)==None:
+		return (0,'my new permission')	
+	
+	return api_fopen(path)
+	
+def test_api_create_file():
+	#need api_fopen to test
+	print api_create_file('/a/b/c')
+print 'testing createfile'
+test_api_create_file()
+
+print 'testingclose'
+print test_api_fclose()
+	

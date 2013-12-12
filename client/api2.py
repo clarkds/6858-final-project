@@ -51,6 +51,7 @@ watermark
 4-byte len, checksum
 4-byte len, CPK
 4-byte len, edit_number
+contents -> rm filename or add filename
 
 log for directory on server:
 watermark
@@ -69,7 +70,7 @@ SOCKET_TIMEOUT = 5
 SECRET_LEN = 24
 
 client_all_public_keys={} 	#key=det(user), val = public key of users
-client_user = None
+client_user = None #the user who is logged in 
 client_encUser = None
 client_passw = None
 client_working_dir = None
@@ -244,6 +245,23 @@ def log_path(path):
 
 def test_log_path():
 	if log_path('/a/b/c')=='/a/b/.log_c':
+		return True
+	else:
+		return False
+		
+def dir_path(path):
+	newpath=newpath=sanitize_path(path).split('/')
+	newpath.pop(-1)
+	return string.join(newpath,'/')
+
+def meta_path(path):
+	# appens .log_ to begining of last part of the path
+	newpath=sanitize_path(path).split('/')
+	newpath[-1]='.meta_'+newpath[-1]
+	return string.join(newpath,'/')
+
+def test_meta_path():
+	if log_path('/a/b/c')=='/a/b/.meta_c':
 		return True
 	else:
 		return False
@@ -610,34 +628,6 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 
 	return True
 	
-	"""
-	if secretsFile is None:
-		client_secrets = sym_dec(hash(passw), dataDir/user0/secrets)
-		user_sk = client_secrets ["user_sk"]
-		user_pk = client_secrets ["user_pk"]
-	else:
-		client_secrets = sym_dec(hash(passw), dataDir/user0/secrets)
-		user_sk = client_secrets ["user_sk"]
-		user_pk = client_secrets ["user_pk"]
-	client_socket = comm.create_client_socket()
-	{OP: "login", ENC_USER: client_enc, User, passw: passw, all_public_keys: all_public_keys}		
-	client_all_public_keys = all_public_keys
-
-	{OP: "ack", STATUS: 0 on success, user_pk: (len, user_pk)}
-	if status == 0:
-		if client_secrets["user_pk"] != all_public_keys[client_enc_user] from server:
-			return False
-		mkdir dataDir, dataDir/user0 dataDir/user0/data if they don't exist
-		if secretsFile != None:
-			copy secretsFile to dataDir/user0/secrets
-	
-		if not update_keys():
-			return False
-		
-		return True
-	else:
-		return False
-	"""
 
 def test_api_login():
 	assert api_login("leo", "123456")
@@ -739,6 +729,8 @@ def api_fopen(path, mode):
 	return handle
 	"""
 
+
+
 def api_fseek(handle, offset, whence=1):
 	return handle.seek(offset,whence)
 
@@ -755,7 +747,8 @@ def api_fread(handle,n=None):
 		return handle.read(n)
 
 def api_fflush(handle):
-	return handle.flush()
+	handle.flush()
+	return api_fflush_helper(handle,0)
 
 
 def test_fseek_ftell_fwrite_fread_fflush():
@@ -894,16 +887,31 @@ def test_api_fflush_helper():
 	testing.close()
 	
 	print api_fflush_helper(m, 0)
-def api_fclose(handle):	# fclose
-	"""
-	if mode == "w":
-		api_fflush()
-	fclose(handle)
-	del client_open_files[handle] 
-	"""
 
-def api_mkdir(path):
-	passw
+
+
+def api_fclose(handle):	# fclose
+	global client_loggedIn
+	global client_open_files
+	global MODE
+	if client_loggedIn==False:
+		return (0,'client not logged int')
+	if client_open_files[handle][MODE]=='w+':
+		if api_fflush(handle)==0:
+			return (0,'couldnt flush')
+	del client_open_files[handle]
+	return handle.close()
+
+def test_api_fclose():
+	global client_open_files
+	m=open('testing2','w+')
+	client_open_files[m]=[1,2,3,4,5,6,7]
+	print api_fclose(m)
+	try:
+		print client_open_files[m]
+		return 'doesnt work!'
+	except:
+		return True
 
 def api_chdir(path):
 	"""
@@ -913,16 +921,7 @@ def api_chdir(path):
 		client_working_dir = resolve ".."
 	"""
 
-# permissions file contains un-encrypted user names
-def api_list_permissions(path):
-	"""
-	permissions_map = read_permissions_map()
-	enc_path = encrypt_path(path)
-	if enc_path not in permissions_map:
-		return [[],[]]
-	else:
-		retval = permissions_map[enc_path]
-	"""
+
 
 
 def api_mkdir(parent, new_dir_name):
@@ -937,44 +936,72 @@ def api_mkdir(parent, new_dir_name):
 	api_fclose(handle)
 	"""
 
-# same as mv old_parent/old_filename to new_parent/new_filename
-def api_mv(old_parent, old_filename, new_parent, new_filename):
-	"""
-	//filename does not have ".." or slashes
-	//TODO: check that you have write access to all children
-	handle1 = api_fopen(old_parent)
-	return 0 if handle1 == 0
-	handle2 = api_fopen(new_parent)
-	return 0 if handle2 == 0
-	fwrite(handle1, "mv old_parent/old_filename to new_parent/new_filename")
-	fwrite(handle2, "mv old_parent/old_filename to new_parent/new_filename")
-	fflush(handle1)
-	fflush(handle2)
-	tell server to do the mv (with secret number)
-	fclose(handle1)
-	fclose(handle2)
-	recursive set perms using api_ls and a queue
-	"""
+# can only move a single file at the time ->
+def api_mv(old_path, new_path):
+	global client_loggedIn
+	global client_open_files
+	global METADATA
+	global LOG_PATH_ON_DISK
+	global CONTENTS_PATH_ON_DISK
+	if client_loggedIn==False:
+		return (0,'client not logged in')
+	handle1=api_open(old_parent,'w+')
+	handle2=api_open(new_path,'w+')
+	contents=api_fread(handle1)
+	client_open_files[handle2][METADATA]=client_open_files[handle1][METADATA]
+	client_open_files[handle2][LOG_PATH_ON_DISK]=client_open_files[handle1][LOG_PATH_ON_DISK]
+	client_open_files[handle2][CONTENTS_PATH_ON_DISK]=client_open_files[handle1][CONTENTS_PATH_ON_DISK]
+	if api_fflush(handle2)!=1:
+		return (0,'flush failed')
+	if api_rm(handle1)!=1:
+		return (0,'rm failed')
+		
+def test_api_mv():
+	##cant test yet
 
-def api_rm(parent_dir, filename):
-	"""
-	//filename does not have ".." or slashes
-	//TODO: check that you have write access to all children
-	//make sure new_dir_name contains no slashes
-	handle=api_opendir(parent,'w')
-	api_fseek(handle) to end
-	api_fwrite(handle, "rm filename\n")
-	//fflush this
-	//tell server to rm while presenting secret number
-	setPermissions([],[], True)
-	api_fclose(handle)
-	"""
+def api_opendir(path):
+	meta=meta_path(path)
+	return api_fopen(meta, 'w+')
 
-def api_opendir(path, mode):
-	#handle = api_fopen(dir_metadata_path(path), mode)
-	pass
 
-def api_list_dir(handle):
+def api_rm(filename,parent_path=client_working_dir):
+	global client_loggedIn
+	global client_working_dir
+	global client_open_files
+	global LOG_PATH_ON_DISK
+	global CONTENTS_PATH_ON_DISK
+	if client_loggedIn==False:
+		return (0,'client not logged int')
+	parent_path=sanitize_path(parent_path)
+	meta=api_opendir(parent_path)
+	totalpath=parent_path+filename
+	check=False
+	for m in client_open_files:
+		if m[CONTENTS_PATH_ON_DISK]==totalpath:
+			check=True
+	if check==True:
+		return (0,'file cannot be removed because it is open')
+	api_fread(meta)
+	api_fwrite(meta,'\nrm filename\n')
+	api_fflush(meta)
+	log_file=open(client_open_files[meta][LOG_PATH_ON_DISK],'r')
+	log_data=log_file.read()
+	diff_obj=parse_log(log_data)
+	filepassw=diff_obj.password
+	if api_set_permissions(sanitize_path(meta_path(path)), meta, [], [],True)==False:
+		return (0,'could not set permissions')
+	message={"ENC_USER":client_encUser, "OP":"deleteFile", "PARENT_SECRET":old_filepassw,"PARENT_LOG_DATA":new_filepassw}
+	if send_to_server(message)==None:
+		return False
+	return True
+	
+	
+def test_api_rm():
+	###Can't be tested untill fopen is created
+	print api_rm('boby','a/b/c')	
+	
+
+def api_list_dir(path):
 	"""
 	compute encrypted dir path by removing the last /.metadata
 	ask server to ls enc_dir_path, and send raw data for metadata + log
@@ -992,6 +1019,7 @@ def api_list_dir(handle):
 def api_closedir(handle):
 	#api_fclose(handle)
 	pass
+
 
 
 def read_permissions_list(handle): ### returns permissons of a file by reading the log of the file
@@ -1202,6 +1230,9 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 
 	return 1
 
+def api_list_permissions(handle):
+	return read_permissions_list(handle)
+
 def test_set_perms():
 	global client_user
 	client_user='sally'
@@ -1240,4 +1271,81 @@ def test_set_perms():
 	testing.close()
 	
 	print api_set_permissions(otherfile, m, ['sally'], ['tommy'],False)
-test_set_perms()
+#test_set_perms()
+
+
+#### so we can edit in any way we want
+def export(handle,text_file):
+	api_fseek(handle,0,0)
+	contents=api_fread(handle)
+	temp=open(text_file,'w')
+	temp.write(contents)
+	temp.close()
+	return 1
+	
+def import_and_flush(handle,text_file):
+	temp=open(text_file,'r')
+	contents=temp.read()
+	temp.close()
+	api_fseek(handle,0,0)
+	api_fwrite(handle,contents)
+	api_fflush(handle)
+	return 1
+	
+def api_create_file(path):
+	global client_open_files
+	global LOG_PATH_ON_DISK
+	global client_keys
+	global client_password
+	global client_user
+	global client_encUser
+	global WATERMARK
+	
+	directory=dir_path(path)
+	path_filename=path_name(path)
+	enc_dir=encrypt_path(dir_path)
+	dir_handle=api_opendir(dir_path)
+	log_file=open(client_open_files[dir_handle][LOG_PATH_ON_DISK],'r')
+	data=log_file.read()
+	diff_obj=parse_log(data)
+	parent_secret=diff_obj.password
+	api_fread(dir_handle)
+	api_fwrite(dir_handle,'\n add'+path_filename+'\n')
+	api_fflush(dir_handle)
+	
+	#Create filepassw
+	filepassw=randomword(40)
+	#create csk and cpk
+	secret=crypt.create_asym_key_pair()
+	#create read and write key
+	new_read_key=crypt.create_sym_key(crypt.hash(client_password), path_filename, directory)[1]
+	new_write_key=crypt.create_sym_key(crypt.hash(client_password), path_filename, directory)[1]
+	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
+	
+	enc_path=encrypt_path(directory)+enc_filename
+	client_keys[enc_path]=(new_read_key,new_write_key)
+	store = pickle.dumps((enc_path, new_read_key, new_write_key))
+	my_new_perm  = (client_encUser, crypt.sym_enc(client_public_keys[client_encUser],store))
+	new_log=difflog.diff_log(secret[-1],filepassw)
+	new_log.update_perm([],[my_new_perm])
+	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+
+	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
+	checksum=create_checkSum(meta,'',secret[-1])
+	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
+	create_msg={"ENC_USER":client_encUser, "OP":"createFile", "PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
+	if send_to_server(create_msg)==None:
+		return (0,'could not create file')
+	send_perm={}
+	new_message={"ENC_USER":client_encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+	if send_to_server(new_message)==None:
+		return (0,'my new permission')	
+	
+	return api_fopen(path)
+	
+def test_api_create_file():
+	#need api_fopen to test
+	print api_create_file('/a/b/c')
+print 'testing createfile'
+test_api_create_file()
+
