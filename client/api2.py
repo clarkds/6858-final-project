@@ -1241,7 +1241,6 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 	enc_diff_old=crypt.sym_enc(client_keys[enc_path][1],dec_diff)
 	
 	
-	
 	change=write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key)
 	
 	diff=open(client_open_files[handle][LOG_PATH_ON_DISK],'r')
