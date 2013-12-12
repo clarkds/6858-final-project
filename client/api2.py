@@ -78,6 +78,8 @@ client_working_dir = None
 client_secrets = {}
 client_loggedIn = False		#True or False. all functions throw an exception if not client_loggedIn
 client_keys = {}			#key = enc_path, val = (file_RK, file_WK)
+client_path_key = {}
+client_enc_path_key = {}
 client_socket = None
 client_open_files = {}		#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
 	# metadata_map is for accessing each part of metadata
@@ -100,6 +102,8 @@ def reset_client_vars():
 	global client_secrets
 	global client_loggedIn
 	global client_keys
+	global client_path_key
+	global client_enc_path_key
 	global client_socket
 	global client_open_files
 	
@@ -111,6 +115,8 @@ def reset_client_vars():
 	client_secrets = {}
 	client_loggedIn = False
 	client_keys = {}
+	client_path_key = {}
+	client_enc_path_key = {}
 		
 	if client_socket is not None:
 		try:
@@ -331,8 +337,12 @@ def update_keys():
 	global client_keys
 	global client_encUser
 	global client_secrets
+	global client_path_key
+	global client_enc_path_key
 	
 	client_keys = {}
+	client_path_key = {}
+	client_enc_path_key = {}
 	resp = send_to_server({"OP": "getPermissions", "ENC_USER": client_encUser, "TARGET": client_encUser})
 	if resp is None:
 		return False
@@ -341,6 +351,25 @@ def update_keys():
 		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client_secrets["user_sk"], perm_tuple[2]))
 		client_keys[enc_pathname] = (read_key, write_key)
 	print "KOBE BRYANTTTTTT"
+	enc_path_list = client_keys.keys()
+	enc_path_list = [i.split('/') for i in enc_path_list]
+	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))
+
+	for enc_path in enc_path_list:
+		path = []
+		full_enc_path = string.join(enc_path, '/')
+		if len(enc_path) == 2:
+			path.append(enc_path[0])
+			name = crypt.sym_dec(client_keys[full_enc_path],enc_path[1])
+			path.append(name)
+		else:
+			path.append(client_path_key[string.join(enc_path[:-1],'/')])
+			name = crypt.sym_Dec(client_keys[full_enc_path], enc_path[-1])
+			path.append(name)
+		full_path = string.join(path, '/')
+		client_path_key[full_path] = full_enc_path
+		client_enc_path_key[full_enc_path] = full_path
+		
 	return True
 
 def test_update_keys():
@@ -915,13 +944,16 @@ def test_api_fclose():
 		return True
 
 def api_chdir(path):
-	"""
-	if path is relative:
-		client_working_dir += resolve ".."
-	if path is absolute:
-		client_working_dir = resolve ".."
-	"""
-
+	global client_working_dir
+	
+	spec_split = path.split('../')
+	client_path_list = client_working_dir.split('/')
+	index = len(client_path_list)-len(spec_split)+1
+	client_path_list = client_path_list[:index]
+	client_working_dir = string.join(client_path_list, '/')
+	new_client_path = sanitize_path(spec_slit[-1])
+	
+	client_working_dir = new_client_path
 
 
 
@@ -1003,19 +1035,28 @@ def test_api_rm():
 	
 
 def api_list_dir(path):
-	"""
-	compute encrypted dir path by removing the last /.metadata
-	ask server to ls enc_dir_path, and send raw data for metadata + log
-	decrypt and parse metadata using helper method (?)
-	verify_checksum on encrypted filenames
-	if not verified
-		return false
-	listing = []
-	iterate through encrypted files
-		if you have key:
-			listing += [decrypt]
-	returning listing
-	"""
+	enc_path = encrypted_path(path)
+	list_directory = {"ENC_USER":client_encUser, "OP":"ls", "PATH":enc_path}
+	response = send_to_server(list_directory)
+	if response==None:
+		return (0,'listing directory')
+		
+	directory_contents = []
+	for object in directory_contents["FILES"]:
+		obj_enc_path = enc_path + object
+		if obj_enc_path in client_keys:
+			file_key = client_keys[obj_enc_path][0]
+			file_name = crypt.sym_dec(file_key, object)
+			directory_contents.append((file_name, "FILE"))
+			
+	for object in directory_contents["FOLDERS"]:
+		obj_enc_path = enc_path + object
+		if obj_enc_path in client_keys:
+			dir_key = client_keys[obj_enc_path][0]
+			dir_name = crypt.sym_dec(dir_key, object)
+			directory_contents.append((dir_name, "FOLDER"))
+			
+	return directory_contents
 
 def api_closedir(handle):
 	#api_fclose(handle)
