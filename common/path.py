@@ -29,3 +29,8 @@ def get_logfile_path(path):
 	sub_path = get_parent_directory(path)
 	log_path = sub_path + '/.log_' + path.split('/')[-1]
 	return log_path
+
+def original_path(path):
+	sub_path = get_parent_directory(path)
+	log_path = sub_path + '/.orig_' + path.split('/')[-1]
+	return log_path

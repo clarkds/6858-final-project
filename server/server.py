@@ -264,7 +264,7 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 				else:
 					os.mkdir('users/' + username) 
 					write_file_contents("users/.meta_"+username, msg_obj["META_DATA"])
-					write_file_contents("users/.log_"+username, msg_obj["LOG_DATA"])
+					write_file_contents("users/.log_.meta_"+username, msg_obj["LOG_DATA"])
 					# Create an entry in the public key table
 					password = msg_obj['PASSWORD']
 					public_key = msg_obj['KEY']

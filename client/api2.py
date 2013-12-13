@@ -21,6 +21,7 @@ import shutil
 
 import client_globals as client
 from config import *
+from path import original_path
 
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5007
@@ -649,7 +650,7 @@ def api_create_user(user, passw):	# LEO
 		"OP": "createUser",
 		"PASSWORD": passw,
 		"KEY": user_pk,
-		"SECRET":filepassw, "HOME_DIR_METADATA_DATA":data,"HOME_DIR_LOG_DATA":enc_log})
+		"SECRET":filepassw, "META_DATA":data,"LOG_DATA":enc_log})
 	if resp is None:
 		return False
 	new_message={
@@ -850,7 +851,7 @@ def api_fopen(path, mode):
 			return False
 		log_path_on_disk = log_path(contents_path_on_disk)
 		data = crypt.sym_dec(client.keys[enc_path][1], resp["DATA"])
-		success = save_file(resp["data"], log_path_on_disk)
+		success = save_file(resp["DATA"], log_path_on_disk)
 		if not success:
 			print "save log on disk failed"
 			return False
