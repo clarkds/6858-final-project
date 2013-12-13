@@ -97,13 +97,10 @@ class FileClient(cmd.Cmd):
 			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
 			try:
 				api_list_dir(path)
-				print "N"
 				handle = api_create_file(get_absolute_path(path, fname))
-				print "U"
+				api_fwrite(handle, "")
 				api_fflush(handle)
-				print "T"
-				api_close(handle)
-				print "E"
+				api_fclose(handle)
 			except:
 				print "No such file or directory"
 		else:
