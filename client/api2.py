@@ -140,15 +140,27 @@ def encrypt_path(path):
 	if path == "/":
 		return "/"
 	
+	
+	
 	path_parts = path.split('/')
 	if len(path_parts) == 2:
 		return "/" + crypt.det(path_parts[1])
 	
 	try:
 		enc_path = client.path_key[path]
-		return enc_path
 	except:
-		return None
+		enc_path = None
+		
+	if enc_path is None:
+		try:
+			path_parts[1] = crypt.det(path_parts[1])
+			path = string.join(path_parts,'/')
+			enc_path = client.path_key[path]
+		except:
+			enc_path = None
+			print path, "you're fucked"
+	
+	return enc_path
 
 def write_secrets():
 	if client.passw==None:
@@ -316,14 +328,32 @@ def save_file(data, path_on_disk):
 	return True
 
 # contents is a string
-def verify_checksum(metadata_map, contents):
+def verify_checksum(metadata_map, contents, printing=False):
+	plaintext = contents + metadata_map["cpk"] + metadata_map["edit_number"]
+	signature = metadata_map["checksum"]
+	public_key = metadata_map["cpk"]
+	if printing:
+		print "verify ***************\n***************\n******************\n**************"
+		print (public_key, plaintext, signature)
+	return crypt.verify_dig_sig(public_key, plaintext, signature)
+	"""
 	hashed = crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
 	return crypt.asym_dec(metadata_map["cpk"], metadata_map["checksum"]) == hashed
+	"""
 
-def create_checksum(metadata_map, contents, csk):
+def create_checksum(metadata_map, contents, csk, printing=False):
+	plaintext = contents + metadata_map["cpk"] + metadata_map["edit_number"]
+	(len_sig, sig) = crypt.generate_dig_sig(csk, plaintext)
+	if printing:
+		print "create_checksum ***************\n***************\n******************\n**************"
+		print (csk, plaintext)
+		print sig
+	return (len_sig, sig)
+	"""
 	hashed = crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
 	crypt.asym_dec(metadata_map["cpk"], crypt.asym_enc(csk, hashed)[1])
 	return crypt.asym_enc(csk, hashed)
+	"""
 
 def valid_user_pass(user, passw):
 	# allowed: alphanumeric + underscores and dashes
@@ -359,19 +389,19 @@ def api_create_user(user, passw):	# LEO
 	homedir_secret = randomword(SECRET_LEN)
 	setup_socket()
 	
-	secret=crypt.create_asym_key_pair()
+	(lenPub, pubKey, lenPriv, privKey) = crypt.create_asym_key_pair()
 	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), crypt.det(client.user), '/')[1]
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), crypt.det(client.user), '/')[1]
 	filepassw=randomword(40)
 	client.keys['/'+crypt.det(user)]=(new_read_key,new_write_key)
 	store = json.dumps(("/" + crypt.det(client.user), new_read_key, new_write_key))
 	my_new_perm  = (client.encUser, crypt.asym_enc_long(user_pk,store)[1])
-	new_log=difflog.diff_log(secret[1],filepassw)
+	new_log=difflog.diff_log(privKey,filepassw)
 	new_log.update_perm([],[my_new_perm])
 	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))[1]
 
-	meta={'edit_number':'0','cpk':secret[-1],'checksum':''}
-	checksum=create_checksum(meta,'',secret[1])[1]
+	meta={'edit_number':'0','cpk':pubKey,'checksum':''}
+	checksum=create_checksum(meta,'',privKey)[1]
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')[1]
 	
 	create_user = {
@@ -530,7 +560,13 @@ def api_fopen(path, mode):
 		print "parse metadata failed"
 		return False
 	(metadata_map, contents) = parsed
-	if not verify_checksum(metadata_map, contents):
+	
+	#print "***************************************************"
+	#print metadata_map
+	#print contents
+	#print "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
+	
+	if not verify_checksum(metadata_map, contents, True):
 		print "verify checksum failed"
 		return False
 	success = save_file(contents, contents_path_on_disk)
@@ -641,12 +677,12 @@ def api_fflush_helper(handle, attempt_num):
 	
 	#creating entire file fron contents and metadata and updating editnumber
 	client.open_files[handle][METADATA]['edit_number'] = str(int(client.open_files[handle][METADATA]['edit_number'])+1)
-	####update_checksum(handle,csk)
+	update_checksum(handle,csk)
 	checksum=client.open_files[handle][METADATA]['checksum']
 	
 	edit_number=client.open_files[handle][METADATA]['edit_number']
 	cpk=client.open_files[handle][METADATA]['cpk']
-	data=crypt.watermark()+hex_string(checksum)+checksum+hex_string(edit_number)+edit_number+hex_string(cpk)+cpk+hex_string(contents)+contents
+	data = crypt.watermark() + hex_string(checksum) + checksum + hex_string(cpk) + cpk + hex_string(edit_number) + edit_number + hex_string(contents) + contents
 	enc_data=crypt.sym_enc(client.keys[client.open_files[handle][ENC_PATH]][0],data)
 	
 	#creating new diff on log
@@ -721,7 +757,7 @@ def api_mkdir(parent, new_dir_name):
 	#Create filepassw
 	filepassw=randomword(40)
 	#create csk and cpk
-	secret=crypt.create_asym_key_pair()
+	(lenPub, pubKey, lenPriv, privKey) = crypt.create_asym_key_pair()
 	#create read and write key
 	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
@@ -731,12 +767,12 @@ def api_mkdir(parent, new_dir_name):
 	client.keys[enc_path]=(new_read_key,new_write_key)
 	store = pickle.dumps((enc_path, new_read_key, new_write_key))
 	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
-	new_log=difflog.diff_log(secret[-1],filepassw)
+	new_log=difflog.diff_log(privKey,filepassw)
 	new_log.update_perm([],[my_new_perm])
 	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
 
-	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
-	checksum=create_checksum(meta,'',secret[-1])
+	meta={'edit_number':'0','cpk':pubKey,'checksum':''}
+	checksum=create_checksum(meta,'',privKey)
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
 	create_msg={
 		"ENC_USER":client.encUser,
@@ -900,12 +936,11 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 
 def update_checksum(handle,csk):
 	if True:
-		print client.open_files
 		hold_place=api_ftell(handle)
 		api_fseek(handle,0,0)
 		contents=api_fread(handle)
 		new_checksum=create_checksum(client.open_files[handle][METADATA],contents,csk)
-		client.open_files[handle][METADATA]['checksum']=new_checksum
+		client.open_files[handle][METADATA]['checksum']=new_checksum[1]
 		api_fseek(handle,hold_place,0)
 		return True
 	else:
@@ -1042,21 +1077,13 @@ def api_create_file(path):
 		raise Exception("not logged in")
 	
 	directory=get_parent_directory(path)
-	print directory
 	path_filename=split_path(path)[1]
-	print path_filename
 	enc_dir=encrypt_path(directory)
-	print enc_dir
 	dir_handle=api_opendir(directory)
 	log_file=open(client.open_files[dir_handle][LOG_PATH_ON_DISK],'r')
 	data=log_file.read()
-	print "-------------------------------------------"
-	print data
-	print "-------------------------------------------"
 	diff_obj=parse_log(data)
-	
-	print log_file, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
-	
+		
 	parent_secret=diff_obj.password
 	api_fread(dir_handle)
 	api_fwrite(dir_handle,'\n add'+path_filename+'\n')
@@ -1064,7 +1091,7 @@ def api_create_file(path):
 	
 	file_secret = randomword(40)
 	#create csk and cpk
-	secret=crypt.create_asym_key_pair()
+	(lenPub, pubKey, lenPriv, privKey) = crypt.create_asym_key_pair()
 	#create read and write key
 	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
@@ -1074,16 +1101,17 @@ def api_create_file(path):
 	client.keys[enc_path]=(new_read_key,new_write_key)
 	store = json.dumps((enc_path, new_read_key, new_write_key))
 	
-	print client.public_keys[client.encUser]
-	print store[1]
-	
 	my_new_perm  = (client.encUser, crypt.asym_enc_long(client.public_keys[client.encUser],store)[1])
-	new_log=difflog.diff_log(secret[-1],file_secret)
+	new_log=difflog.diff_log(privKey,file_secret)
 	new_log.update_perm([],[my_new_perm])
 	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
 
-	meta={'edit_number':'0','cpk':secret[-1],'checksum':''}
-	checksum=create_checksum(meta,'',secret[1])[1]
+	meta={'edit_number':'0','cpk':pubKey,'checksum':''}
+	checksum=create_checksum(meta,'',privKey, True)[1]
+	
+	#print "CREATE_FILE CPK", secret[1]
+	#print "CREATE_FILE CSK", secret[-1]
+	#print "CREATE_FILE CHECKSUM", checksum
 	
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+
 		checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+

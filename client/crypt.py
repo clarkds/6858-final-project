@@ -135,10 +135,12 @@ def generate_dig_sig(priv_key, plaintext):
 	h.update(plaintext)
 	signer = PKCS1_PSS.new(key)
 	signature = signer.sign(h)
+	signature = bytesToStr(signature)
 	return (len(signature), signature)
 
 def verify_dig_sig(pub_key, plaintext, signature):
 	pub_key = strToBytes(pub_key)
+	signature = strToBytes(signature)
 	#verifies that the contents of the encrypted file match the digital signature
 	key = RSA.importKey(pub_key)
 	h = SHA512.new()
