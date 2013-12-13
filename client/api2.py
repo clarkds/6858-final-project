@@ -213,16 +213,24 @@ def update_keys():
 	enc_path_list = [i.split('/')[1:] for i in enc_path_list]
 	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))	
 	
+	print enc_path_list, "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+	
 	for enc_path in enc_path_list:
 		path = []
 		full_enc_path = '/' + string.join(enc_path, '/')
+		print "full_enc_path", full_enc_path
+		print "enc_path", enc_path
 		if len(enc_path) == 1:
+			print "111111111111111", enc_path[0]
 			path.append(enc_path[0])
 		elif len(enc_path) == 2:
+			print "222222222222222", (enc_path[0], crypt.sym_dec(client.keys[full_enc_path][0],enc_path[1]))
 			path.append(enc_path[0])
+			print "DECRYPT USING KEY: ", client.keys[full_enc_path][0], " ON VALUE: ", enc_path[1]
 			name = crypt.sym_dec(client.keys[full_enc_path][0],enc_path[1])
 			path.append(name)
 		else:
+			print "333333333333333"
 			path.append(client.enc_path_key["/" + string.join(enc_path[:-1],'/')])
 			name = crypt.sym_dec(client.keys[full_enc_path][0], enc_path[-1])
 			path.append(name)
@@ -814,6 +822,7 @@ def api_mv(old_path, new_path):
 	
 	#TODO: set permissions here...
 	
+	
 	api_fseek(handle2, 0, 0)
 	api_fwrite(handle2, contents)
 	
@@ -841,6 +850,7 @@ def api_rm(path):
 	#	raise Exception("not logged in")
 	
 	path = resolve_path(path)
+		
 	(parent_path, filename) = split_path(path)
 	meta = api_opendir(parent_path)
 	check = False
@@ -850,7 +860,9 @@ def api_rm(path):
 			break
 	if check == True:
 		return (0,'file cannot be removed because it is open')
-	print client.loggedIn
+		
+	handle = api_fopen(path, "w")
+		
 	api_fread(meta)
 	api_fwrite(meta,'\nrm '+filename+'\n')
 	api_fflush(meta)
@@ -858,9 +870,13 @@ def api_rm(path):
 	log_data = log_file.read()
 	diff_obj = parse_log(log_data)
 	filepassw = diff_obj.password
-	#TODO: test this
-	#if api_set_permissions(resolve_path(get_metafile_path(path)), meta, [], [],True)[0] == 0:
-	#	return (0,'could not set permissions')
+		
+	if api_set_permissions(handle, [], [], True)[0] == 0:
+		return (0,'could not set permissions')
+	
+	api_fflush(handle)
+	api_fclose(handle)
+
 	message = {"ENC_USER":client.encUser, "OP":"delete", "PARENT_SECRET":filepassw, "PATH":encrypt_path(path)}
 	if send_to_server(message) == None:
 		return False
@@ -991,12 +1007,16 @@ def api_set_permissions(handle, new_readers_list, new_writers_list, delete_my_pe
 	for reader in old_readers_list:
 		if reader not in old_writers_list:
 			store=json.dumps((enc_path,old_read_key,None))
-			old_permissions.append((reader, crypt.asym_enc_long(client.public_keys[reader[0]], store)[1]))
+			old_permissions.append((reader[0], crypt.asym_enc_long(client.public_keys[reader[0]], store)[1]))
 	for writer in old_writers_list:
 		store=json.dumps((enc_path,old_read_key,old_write_key))
-		old_permissions.append((writer,crypt.asym_enc_long(client.public_keys[writer[0]], store)[1]))
+		old_permissions.append((writer[0],crypt.asym_enc_long(client.public_keys[writer[0]], store)[1]))
+		
 	client.keys[enc_path]=(new_rk, new_wk)
-
+	(enc_parent_path,enc_filename)=split_path(enc_path)
+	(unenc_parent_path,unenc_filename)=split_path(path)
+	new_path=enc_parent_path+'/'+crypt.sym_enc(client.keys[enc_path][0],unenc_filename)[1]
+	
 	#creates new secret
 	new_filepassw=randomword(40)
 	(len_cpk,new_cpk,len_csk,new_csk)=crypt.create_asym_key_pair()
@@ -1017,12 +1037,12 @@ def api_set_permissions(handle, new_readers_list, new_writers_list, delete_my_pe
 	new_permissions=[]
 	for reader in new_readers_list:
 		if reader not in new_writers_list:
-			store=json.dumps((enc_path,new_rk,None))
-			new_permissions.append((reader, crypt.asym_enc_long(client.public_keys[crypt.det(reader)], store)[1]))
+			store=json.dumps((new_path,new_rk,None))
+			new_permissions.append((crypt.det(reader), crypt.asym_enc_long(client.public_keys[crypt.det(reader)], store)[1]))
 	
 	for writer in new_writers_list:
-		store=json.dumps((enc_path,new_rk,new_wk))
-		new_permissions.append((writer,crypt.asym_enc_long(client.public_keys[crypt.det(writer)], store)[1]))
+		store=json.dumps((new_path,new_rk,new_wk))
+		new_permissions.append((crypt.det(writer),crypt.asym_enc_long(client.public_keys[crypt.det(writer)], store)[1]))
 
 	add_perm = {
 		"ENC_USER":client.encUser,
@@ -1036,10 +1056,16 @@ def api_set_permissions(handle, new_readers_list, new_writers_list, delete_my_pe
 	add_perm_resp = send_to_server(add_perm)
 	
 	change_secret = {"ENC_USER":client.encUser, "OP":"changeFileSecret",
-		"NEW_SECRET":old_filepassw,"OLD_SECRET":new_filepassw,"PATH":enc_path}
+		"NEW_SECRET":new_filepassw,"SECRET":old_filepassw,"PATH":enc_path, "NEW_PATH":new_path}
 	if send_to_server(change_secret)==None:
 		return (0,'changing the secret')
 		
+	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+	print old_permissions
+	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+	
 	removed_perms={"ENC_USER":client.encUser,
 		"OP":"deletePermissions",
 		"USERS_AND_PERMS":old_permissions,
@@ -1113,6 +1139,12 @@ def api_create_file(path):
 	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
+	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+	print "path: ", path, "new_read_key: ", new_read_key, "path_filename: ", path_filename
+	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+	
 	
 	enc_path = encrypt_path(directory) + "/" + enc_filename
 	client.keys[enc_path]=(new_read_key,new_write_key)
