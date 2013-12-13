@@ -158,7 +158,7 @@ def encrypt_path(path):
 			enc_path = client.path_key[path]
 		except:
 			enc_path = None
-			print path, "you're fucked"
+			return False
 	
 	return enc_path
 
@@ -703,11 +703,6 @@ def api_fflush_helper(handle, attempt_num):
 	#creating new diff on log
 	old_file = open(client.open_files[handle][PATH_TO_OLD_FILE],'r')
 	old_contents = old_file.read()
-	print "###############################################"
-	print "old file path:", client.open_files[handle][PATH_TO_OLD_FILE]
-	print "old file contents:", old_contents
-	print "new_file path", client.open_files[handle][CONTENTS_PATH_ON_DISK]
-	print "new_file contents:", contents
 	
 	diff_obj.create_diff(client.user,client.secrets["user_sk"],old_contents,contents)
 	client.secrets[client.open_files[handle][CONTENTS_PATH_ON_DISK]]=client.open_files[handle][METADATA]['edit_number'] #updates last edit_number per user
@@ -837,9 +832,7 @@ def api_mv(old_path, new_path):
 		raise Exception("not logged in")
 		
 	handle1 = api_fopen(old_path,'w')
-	print old_path
-	handle2 = api_fopen(new_path,'w')
-	print new_path
+	handle2 = api_create_file(new_path)
 	contents = api_fread(handle1)
 	
 	#TODO: set permissions here...
@@ -850,6 +843,7 @@ def api_mv(old_path, new_path):
 	
 	if api_fflush(handle2) != 1:
 		return (0,'flush failed')
+	api_fclose(handle2)
 	api_fflush(handle1)
 	api_fclose(handle1)
 	if api_rm(old_path) != 1:
@@ -869,7 +863,8 @@ def api_opendir(path):
 def api_rm(path):
 	#if not client.loggedIn:
 	#	raise Exception("not logged in")
-	
+
+	print "Entered rm"	
 	path = resolve_path(path)
 		
 	(parent_path, filename) = split_path(path)
@@ -879,8 +874,8 @@ def api_rm(path):
 		if client.open_files[m][PATH] == path:
 			check = True
 			break
-	if check == True:
-		return (0,'file cannot be removed because it is open')
+	#if check == True:
+		#return (0,'file cannot be removed because it is open')
 
 	handle = api_fopen(path, "w")
 		
@@ -891,14 +886,16 @@ def api_rm(path):
 	log_data = log_file.read()
 	diff_obj = parse_log(log_data)
 	filepassw = diff_obj.password
+	api_fclose(meta)
 		
-	if api_set_permissions(handle, [], [], True)[0] == 0:
-		return (0,'could not set permissions')
+	#if api_set_permissions(handle, [], [], True)[0] == 0:
+		#return (0,'could not set permissions')
 	
 	api_fflush(handle)
 	api_fclose(handle)
 
 	message = {"ENC_USER":client.encUser, "OP":"delete", "PARENT_SECRET":filepassw, "PATH":encrypt_path(path)}
+	print "A!!!!!!!!!!!!!!!!!!"
 	if send_to_server(message) == None:
 		return False
 	return True

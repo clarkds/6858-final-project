@@ -63,12 +63,6 @@ class FileClient(cmd.Cmd):
 		args = parse(arg)
 		if len(args) == 0:
 			dir_contents = api_list_dir(self.current_dir)
-		elif len(args) == 1:
-			try:
-				dir_contents = api_list_dir(path)
-			except:
-				print "No such file or directory"
-				return
 		else:
 			print "Error"
 			return
@@ -90,6 +84,8 @@ class FileClient(cmd.Cmd):
 			except:
 				print "No such file or directory"
 				return
+		else:
+			print "Error"
 
 	def do_touch(self, arg):
 		args = parse(arg)
@@ -173,9 +169,6 @@ class FileClient(cmd.Cmd):
 				os.remove(temp_filename)
 			except:
  				print "No such file or directory" 
-	def do_share(self, arg):
-		args = parse(arg)
-		pass
 
 	def do_logout(self, arg):
 		api_logout()
