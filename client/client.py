@@ -24,8 +24,6 @@ class LoginClient(cmd.Cmd):
 
 	def do_login(self, arg):
 		(username, password) = parse(arg)
-		print username
-		print password
 		if api_login(username, password):
 			fclient = FileClient()
 			fclient.set_username(username)
@@ -51,9 +49,26 @@ class FileClient(cmd.Cmd):
 		self.current_dir = "/" + username
 		self.username = username
 		self.prompt = "file-server:" + self.current_dir + " " + self.username + "$ "
+		self.help_message = {"logout":"",\
+												"ls":"[path]"\
+												"cd":"[path]"\
+												"touch":"[file]"\
+												"rm":"[file]"\
+												"mv":"[path][path]"\
+												"mkdir":"[path]"\
+												"vim":"[file]"\
+												"emacs":"[file]"\
+												"share":"[user][file]"\
+												"logout":""}
+
 
 	def do_logout(self, arg):
 		return True
+
+	def do_help(self, arg):
+		print "Supported commands:"
+		for i in self.help_message.keys():
+			print i, self.help_message[i]
 
 	def do_ls(self, arg):
 		args = parse(arg)

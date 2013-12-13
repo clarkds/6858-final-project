@@ -75,7 +75,6 @@ delete:  #deletes a file or directory if the directory is empty
 	request
 		PATH
 		PARENT_SECRET
-		PARENT_LOG_DATA
 	response
 
 changeFileSecret:  #changes the secret written in the logFil: This is used to verify that a client has permission to write to a file, logfile, or change permissions
