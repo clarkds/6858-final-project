@@ -21,7 +21,7 @@ import shutil
 
 import client_globals as client
 from config import *
-from path import original_path
+from path import *
 
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5007
@@ -107,7 +107,6 @@ def randomword(length):
 
 # returns a msg obj on success, None on error
 def send_to_server(msg_obj):
-	
 	try:
 		resp = msg.client_send(client.socket, msg_obj)
 	except Exception as e:
@@ -121,14 +120,6 @@ def send_to_server(msg_obj):
 		
 	if resp["STATUS"] != 0:
 		if "ERROR" in resp.keys():
-			if TESTING_ON:
-				# for unit tests, since they re-create same user
-				if TESTING_ALLOW_RECREATE_USER and resp["ERROR"] == 'User already exists':
-					resp["STATUS"] = 0
-					setup_socket()
-					assert msg.client_send(client.socket, {"ENC_USER":"asaj", "OP":"loginUser", "PASSWORD":"test"})["STATUS"] == 0
-					return resp
-
 			client.err_msgs += resp["ERROR"] + "\n"
 		return None
 		
@@ -143,150 +134,55 @@ def setup_socket():
 	client.socket = msg.create_client_socket(SERVER_IP, SERVER_PORT, SOCKET_TIMEOUT)
 	return (client.socket is not None)
 
-def test_send_to_server():
-	setup_socket()
-	assert send_to_server({"ENC_USER":"asaj", "OP":"mkdir", "PATH":"xxxxxnoexist/secondtest"}) is None
-	setup_socket()
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"penis", "KEY":"55555", "PARENT_SECRET":"00000"})["STATUS"] == 0
-
-	print "YAYY"
-	client.socket.close()
-
-def sanitize_path(path):
-# returns clean string of path. If path doesn't start with a /, prefixes global path to beginning of string or eror
-	print path, "*****"
-	if path[0]!='/' and client.working_dir!=None:
-		path=client.working_dir+'/'+path
-	elif path[0]!='/' and client.working_dir==None:
-		path='ERROR - NO CLIENT WORKING DIRECTORY'
-	path_parts = path.split('/')
-	path_parts = [path_parts[0]] + filter(None, path_parts[1:])	# remove empty strings from list
-	new_path_parts=[]
-	for a in path_parts:
-		if a!='..':
-			new_path_parts.append(a)
-	clean_path = string.join(new_path_parts,'/')
-	return clean_path
-
-def test_sanitize_path():
-	client.working_dir='bobby/w'
-	if sanitize_path('a/b/c')!='bobby/w/a/b/c':
-		return False
-	if sanitize_path('/a/b/..//c')!='/a/b/c':
-		return False
-	return True
-
 def encrypt_path(path):	
 	assert(path.startswith('/'))
 	
 	if path == "/":
 		return "/"
 	
+	path_parts = path.split('/')
+	if len(path_parts) == 2:
+		return "/" + crypt.det(path_parts[1])
+	
 	try:
 		enc_path = client.path_key[path]
 		return enc_path
 	except:
 		return None
-		
-	return path
-
-def test_encrypt_path():
-	user = "leo"
-	home_dir = "/" + user
-	(key_len, home_dir_key) = crypt.create_sym_key(crypt.hash(user), home_dir, user)
-	enc_user = crypt.sym_enc(home_dir_key, user)
-	# TODO...
-
-# any_path can be non-encrypted or encrypted
-def log_path(path):
-	# appens .log_ to begining of last part of the path
-	newpath=sanitize_path(path).split('/')
-	newpath[-1]='.log_'+newpath[-1]
-	return string.join(newpath,'/')
-
-def test_log_path():
-	if log_path('/a/b/c')=='/a/b/.log_c':
-		return True
-	else:
-		return False
-		
-def dir_path(path):
-	newpath=newpath=sanitize_path(path).split('/')
-	newpath.pop(-1)
-	return string.join(newpath,'/')
-
-def meta_path(path):
-	# appens .log_ to begining of last part of the path
-	newpath=sanitize_path(path).split('/')
-	newpath[-1]='.meta_'+newpath[-1]
-	return string.join(newpath,'/')
-
-def test_meta_path():
-	if log_path('/a/b/c')=='/a/b/.meta_c':
-		return True
-	else:
-		return False
 
 def write_secrets():
 	if client.passw==None:
 		return False
 	#creates paths for separate users, returns True or False
 	try:
-		print "*************"
 		if os.path.exists('data')==False:
 			os.mkdir('data')
-		print "*************"
-		print "!@#$!@$!@", client.secrets
 		pickled=pickle.dumps(client.secrets)
 		(len_passw_key, passw_key) = crypt.create_sym_key(client.passw, client.passw, client.passw, False)
 		enc_pickle=crypt.sym_enc(passw_key, pickled)[1]
-		print "*************"
 		if os.path.exists('data/'+client.user)==False:
 			os.mkdir('data/'+client.user)
-		print "*************"
 		if os.path.exists('data/'+client.user+'/data'):
 			os.mkdir('data/'+client.user+'/data')
-		print "*************"
 		
 		secret_file=open('data/'+client.user+'/secrets','w')
 		secret_file.write(enc_pickle)
-		secret_file.close()
-		print "*************"
-		ans=True
-	except:
-		traceback.print_exc()
-		ans=False
-	return ans
-	
-
-
-	
-def load_secrets():
-	try:
-		secret_file=open('data/'+client.user+'/secrets','r')
-		(len_passw_key, passw_key) = crypt.create_sym_key(client.passw, client.passw, client.passw, False)
-		decrypted_pickle=crypt.sym_dec(passw_key, secret_file.read())
-		client.secrets=pickle.loads(decrypted_pickle)
-		print client.secrets, "***"
 		secret_file.close()
 		return True
 	except:
 		traceback.print_exc()
 		return False
-
-
-
-def test_write_secrets():
-	client.working_dir='bobby/w'
-	client_secret={'time':'boby'}
-	test={'time':'boby'}
-	client.user='bbbb'
-	client.passw=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	m=write_secrets()
-	w=load_secrets()
-	if test==client.secrets:
+	
+def load_secrets():
+	try:
+		secret_file=open('data/'+client.user+'/secrets','r')
+		(len_passw_key, passw_key) = crypt.create_sym_key(client.passw, client.passw, client.passw, False)
+		decrypted_pickle = crypt.sym_dec(passw_key, secret_file.read())
+		client.secrets = pickle.loads(decrypted_pickle)
+		secret_file.close()
 		return True
-	else:
+	except:
+		traceback.print_exc()
 		return False
 
 def update_keys():
@@ -296,17 +192,14 @@ def update_keys():
 	resp = send_to_server({"OP": "getPermissions", "ENC_USER": client.encUser, "TARGET": client.encUser})
 	if resp is None:
 		return False
-	print "******* decrypting perm with user sk *********************"
 	for perm_tuple in resp["PERMISSIONS"]:
-		#print perm_tuple[2]
 		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client.secrets["user_sk"], perm_tuple[2]))
-		#print enc_pathname,read_key,write_key
 		client.keys[enc_pathname] = (read_key, write_key)
-	print "KOBE BRYANTTTTTT"
+		
 	enc_path_list = client.keys.keys()
 	
-	for key, val in client.keys.iteritems():
-		print "***", key, val
+	#for key, val in client.keys.iteritems():
+	#	print "***", key, val
 	
 	enc_path_list = [i.split('/')[1:] for i in enc_path_list]
 	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))
@@ -332,39 +225,6 @@ def update_keys():
 		
 	return True
 
-def test_update_keys():
-	setup_socket()
-	client.user = "asaj"
-	client.encUser = 'asaj'
-	
-	(len_key, key) = crypt.create_sym_key("test","test.txt","asaj")
-	(len_pub,pub,len_priv, priv) = crypt.create_asym_key_pair()
-	enc_file = crypt.sym_enc(key, "test.txt")[1]
-	client.keys[enc_file] = (key,key)
-	client.secrets["user_sk"] = priv
-	
-	file_path = "/asaj/" + enc_file
-	perm = crypt.asym_enc(pub, (json.dumps((file_path,key,key))))[1]
-	print "1"
-	
-	
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":pub, "SECRET":"00000"})["STATUS"] == 0
-	
-	assert send_to_server({"ENC_USER":"asaj", "OP":"createFile", "PATH":file_path, "PARENT_SECRET":"00000", "SECRET":"12345", "DATA":"Added test.txt", "LOG_DATA":"Created"})["STATUS"] == 0
-
-	assert send_to_server({"ENC_USER":"asaj", "OP":"addPermissions", "TARGET":"asaj", "USERS_AND_PERMS": [("asaj",perm)], "PATH":file_path, "SECRET":"12345", "LOG_DATA":"random_string"})["STATUS"] == 0
-	
-	print "everything sent to server"
-	print "calling update_keys()"
-	assert update_keys()
-	print "checking client keys"
-	assert client.keys[file_path] == (key,key)
-	print "checking path mapping"
-	for key,value in client.path_key.iteritems():
-		print key,value
-	for key,value in client.enc_path_key.iteritems():
-		print key,value
-
 def get_metadata(handle):
 	return client.open_files[handle][METADATA]
 
@@ -376,28 +236,21 @@ def parse_metadata_and_contents_for_file(data):
 	#returns tuple of (metadata_map,contents) or None
 	try:
 		bp=0
-		print "watermark ind", 0, len(crypt.watermark())
 		watermark=data[0:len(crypt.watermark())]
 		if watermark!=crypt.watermark():
 			return None
 		bp+=len(watermark)
-		print "checkSum_Hex", data[bp:bp+10], bp, bp+10
 		checkSum_Hex=data[bp:bp+10]
 		checkSum_len=int(checkSum_Hex,16)
 		bp+=10
-		print "checkSum", data[bp:bp+checkSum_len], bp, bp+checkSum_len
 		checkSum=data[bp:bp+checkSum_len]
 		bp+=checkSum_len
-		print "CPK_Hex", data[bp:bp+10], bp, bp+10
 		CPK_Hex=data[bp:bp+10]
 		CPK_len=int(CPK_Hex,16)
 		bp+=10
-		print "CPK", data[bp:bp+CPK_len], bp, bp+CPK_len
 		CPK=data[bp:bp+CPK_len]
 		bp+=CPK_len
-		print "edit_number_Hex", data[bp:bp+10], bp, bp+10
 		edit_number_Hex=data[bp:bp+10]
-		print "edit_number###", edit_number_Hex
 		edit_number_len=int(edit_number_Hex,16)
 		bp+=10
 		edit_number=data[bp:bp+edit_number_len]
@@ -409,41 +262,9 @@ def parse_metadata_and_contents_for_file(data):
 		metadata={'checksum':checkSum,'cpk':CPK,'edit_number':edit_number}
 		return (metadata,contents)
 	except:
-		print "ASKFDDSAKF"
 		traceback.print_exc()
 		return None
-		
-def test_parse_metadata_and_contents_for_file():
-	#data=crypt.watermark() + '0x00000002210x0000000120x0000000130x000000014'
 	
-	data = "DEADBEEF0x000002156545faa0a5bda350044b3a54fee12\
-89134bc23ec3397a96391dac794b8020fa4e3cbf02af48666a1692a69ef9f188bf608a2d80db6da6\
-1fa6975c9c2ee3ed311b140c58490c4301bc49a7349ed0fa6883b26a00065450e8dcda70090d4dc2\
-1ca05781da58c4f7480d81cebb6bf450a380402500a45dd1defbc66d46bd03626d234ad8737b56de\
-af5ab9a889da97ce5354e2e7778318c81fe5bb0ce1e2203e4980837bf52fa6f72a95eb7ddc337626\
-4fe773199e7a2d102808ee978a077f258092d25cbbccde501b53f6ba326265f3263c4a1215c7f9c1\
-99fc3ce9212f6486df9dba37fc81a225d7838d4330367a055de82e2c0ef6effb9da8596292cc6478\
-1d30x000003992d2d2d2d2d424547494e205055424c4943204b45592d2d2d2d2d0a4d494942496a4\
-14e42676b71686b6947397730424151454641414f43415138414d49494243674b4341514541306c6\
-1535061456d65595655353074632b4773300a67435279526e66347341315a6951786b6b686442776\
-4724368373655577a4f374b696761687870484144633158465a5a53546c586c6e3035773837306d6\
-84b530a656f7249754369334b6f71654f434f64712b3866475865306c54794e333637514b5554734\
-4776d414279515342334f2f6f74796e762f776943326d6d2f73754a0a45775a4b766a6b49436e497\
-943696b4e754c583441584e332b6e2b764c31386b4972545561324a69457470716f536b33746a336\
-b4852626b33444a35664b2b450a6d6c735a6d4d4262426c2b3159416974366e6e4c4e596a3663614\
-15359566832376b6f4f6f46496e3841684c6162544465364f412b436b5a354f5a33487048700a394\
-86f4c364f38535347314b4379477562515842774d7254534a623931386c6b736677766a576830357\
-34c4359786a4d316d53494b697567545868465450765a0a46514944415141420a2d2d2d2d2d454e4\
-4205055424c4943204b45592d2d2d2d2d0x0000001600x00000000"
-	
-	print parse_metadata_and_contents_for_file(data)
-	if parse_metadata_and_contents_for_file(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
-		return True
-	else:
-		return False
-
-#test_parse_metadata_and_contents_for_file()
-
 def hex_string(data):
 	#takes as input a string and returns the length in a hex of 4 bytes
 	data_len= len(data)
@@ -455,16 +276,10 @@ def hex_string(data):
 			newm[1]='0'+newm[1]
 	return string.join(newm,'')
 	
-def test_hex_string():
-	w='what in the world is going on?'
-	if hex_string(w)!='0x00000043':
-		return False
-	return True
-#print test_hex_string()
 
 def parse_log(data):
 	#returns datalog object
-	if True:
+	try:
 		bp=0
 		watermark=data[0:len(crypt.watermark())]
 		if watermark!=crypt.watermark():
@@ -479,76 +294,12 @@ def parse_log(data):
 		diffObj=pickle.loads(contents)
 		###need to figure out how this works
 		return diffObj
-	else:
-		return False
-
-	
-def test_parse_log():
-	datapickle=pickle.dumps({'hi':'by'})
-	size=hex_string(datapickle)
-	data='HI there'+size+datapickle
-	if parse_log(data)!={'hi':'by'}:
-		return False
-	else:
-		return True
-
-
-def parse_metadata_for_dir(data):
-	#returns (metadata_map,contents) or None
-	try:
-		bp=0
-		watermark=data[0:len(crypt.watermark())]
-		if watermark!=crypt.watermark():
-			return None
-		bp+=len(watermark)
-		checkSum_Hex=data[bp:bp+10]
-		checkSum_len=int(checkSum_Hex,16)
-		bp+=10
-		checkSum=data[bp:bp+checkSum_len]
-		bp+=checkSum_len
-		CPK_Hex=data[bp:bp+10]
-		CPK_len=int(CPK_Hex,16)
-		bp+=10
-		CPK=data[bp:bp+CPK_len]
-		bp+=CPK_len
-		edit_number_Hex=data[bp:bp+10]
-		edit_number_len=int(edit_number_Hex,16)
-		bp+=10
-		edit_number=data[bp:bp+edit_number_len]
-		bp+=edit_number_len
-		contents_Hex=data[bp:bp+10]
-		contents_len=int(contents_Hex,16)
-		bp+=10
-		contents=data[bp:bp+contents_len]
-		metadata={'checksum':checkSum,'cpk':CPK,'edit_number':edit_number}
-		return (metadata,contents)
 	except:
-		return None
-	
-def test_parse_metadata_for_dir():
-	# THIS TEST FAILS
-	return False
-	data='HI there0x00000002210x0000000120x0000000130x000000014'
-	if parse_metadata_for_dir(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
-		return True
-	else:
-		return False
-
-
-
-def path_parent(path):
-	parts = path.split("/")
-	filename = parts[-1]
-	#print path
-	#print string.join(parts, "/"), "**********"
-	if len(parts) > 1:
-		parent = string.join(parts[0:-1], "/")
-	else:
-		parent = None
-	return (parent, filename)
+		traceback.print_exc()
+		return False	
 
 def save_file(data, path_on_disk):
-	(parent, filename) = path_parent(path_on_disk)
+	(parent, filename) = split_path(path_on_disk)
 	if parent is not None:
 		try:
 			if not os.path.exists(parent):
@@ -564,36 +315,15 @@ def save_file(data, path_on_disk):
 	
 	return True
 
-def test_path_parent():
-	assert path_parent("a") == (None, 'a')
-	assert path_parent("a/b") == ('a', 'b')
-	assert path_parent("a/b/c") == ('a/b', 'c')
-	assert path_parent("/a/b/c") == ('/a/b', 'c')
-
 # contents is a string
 def verify_checksum(metadata_map, contents):
 	hashed = crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
-	print "***verify_checksum hashed***", hashed
-	print "***verify_checksum cpk***", metadata_map["cpk"]
-	print "***verify_checksum checksum ***", metadata_map["checksum"]
 	return crypt.asym_dec(metadata_map["cpk"], metadata_map["checksum"]) == hashed
 
 def create_checksum(metadata_map, contents, csk):
 	hashed = crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
-	print "***create_checksum hashed***", hashed
-	print "***create_checksum csk***", csk
-	print "***create_checksum cpk***", metadata_map["cpk"]
-	print "***create_checksum checksum***", crypt.asym_enc(csk, hashed)
 	crypt.asym_dec(metadata_map["cpk"], crypt.asym_enc(csk, hashed)[1])
 	return crypt.asym_enc(csk, hashed)
-
-def test_verify_and_create_checksum():
-	(len_pk, cpk, len_sk, csk) = crypt.create_asym_key_pair()
-	contents = "this semester is so long"
-	metadata_map = {}
-	metadata_map["cpk"] = cpk
-	metadata_map["edit_number"] = "123456"
-	checksum = create_checksum(metadata_map, contents, csk)
 
 def valid_user_pass(user, passw):
 	# allowed: alphanumeric + underscores and dashes
@@ -642,52 +372,36 @@ def api_create_user(user, passw):	# LEO
 
 	meta={'edit_number':'0','cpk':secret[-1],'checksum':''}
 	checksum=create_checksum(meta,'',secret[1])[1]
-	print "******************\n***************\n*****************\n**************", checksum
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')[1]
 	
-	resp = send_to_server({
+	create_user = {
 		"ENC_USER": crypt.det(user),
 		"OP": "createUser",
 		"PASSWORD": passw,
 		"KEY": user_pk,
-		"SECRET":filepassw, "META_DATA":data,"LOG_DATA":enc_log})
-	if resp is None:
+		"SECRET":filepassw, "META_DATA":data,"LOG_DATA":enc_log}
+	create_resp=send_to_server(create_user)
+	if create_resp is None:
 		return False
-	new_message={
+	add_perm={
 		"ENC_USER":client.encUser,
 		"OP":"addPermissions",
 		"USERS_AND_PERMS":[my_new_perm],
-		"PATH": "/" + crypt.det(client.user),
+		"PATH": "/.meta_" + crypt.det(client.user),
 		"SECRET": filepassw,
 		"LOG_DATA": enc_log
 	}
-	resp2 = send_to_server(new_message)
-	if resp2 is None:
+	add_perm_resp = send_to_server(add_perm)
+	if add_perm_resp is None:
 		return False
 	client.secrets["user_pk"] = user_pk
 	client.secrets["user_sk"] = user_sk
-	print client.secrets, "77777777"
 	success = write_secrets()
 	if not success:
 		return False
+	return login_helper(user, passw, None, True)
 	
-	login_helper(user, passw, None, True)
-	
-	return True
-	
-def test_api_create_user():
-	
-	assert api_create_user("leo?", "123456") == False
-	assert api_create_user("leo", "123") == False
-	TESTING_ALLOW_RECREATE_USER = False
-	assert api_create_user("leo", "123456")
-	assert api_create_user("leo", "123456") == False
-	TESTING_ALLOW_RECREATE_USER = True
-	clear_state()
-	assert api_login("leo", "bad password") == False
-	assert api_login("leo", "123456")
-
-def api_login(user, passw, secretsFile=None):	# LEO
+def api_login(user, passw, secretsFile=None):
 	clear_state()
 	if login_helper(user, passw, secretsFile, False):
 		return True
@@ -695,7 +409,7 @@ def api_login(user, passw, secretsFile=None):	# LEO
 		clear_state()
 		return False
 
-def login_helper(user, passw, secretsFile, alreadyConnected):	# LEO		
+def login_helper(user, passw, secretsFile, alreadyConnected):	
 	client.user = user
 	client.encUser = crypt.det(user)
 	client.working_dir = "/" + client.user
@@ -746,8 +460,6 @@ def login_helper(user, passw, secretsFile, alreadyConnected):	# LEO
 	return True
 	
 
-def test_api_login():
-	assert api_login("leo", "123456")
 
 def api_logout(keepfiles=False):
 	send_to_server({'OP': "logoutUser", "ENC_USER": client.encUser})
@@ -767,17 +479,6 @@ def clear_state(keepfiles=False):
 	reset_client_vars()
 	client.loggedIn = False	# TODO: take this out after fixing reset_client_vars()
 
-def test_api_fopen():
-	pass
-	assert not api_fopen("/leo/leo", "r")
-
-def strip_meta(key):
-	key_list = key.split('/')
-	if key_list[-1].startswith('.meta_'):
-		key_list[-1] = key_list[-1][len('.meta_'):]
-	key = string.join(key_list, '/')
-	return key
-
 # mode = "r|w"
 def api_fopen(path, mode):	
 	if not client.loggedIn:
@@ -786,25 +487,20 @@ def api_fopen(path, mode):
 	if mode != "r" and mode != "w":
 		print "invalid mode"
 		return False
-	path = sanitize_path(path)
+	path = resolve_path(path)
 	contents_path_on_disk = "data" + path	#path has a leading slash
 
-	#enc_path = encrypt_path(path)	
-	enc_path = path	#TODO: swap these two lines
-
-	print "FOPEN:", path
-	print "FOPEN:", enc_path
-	print "FOPEN:", client.keys
+	is_dir = (strip_meta(path) != path)
+	path = strip_meta(path)
+	enc_path = encrypt_path(path)
+	if is_dir:
+		enc_path = get_metafile_path(enc_path)
 
 	if enc_path is None or strip_meta(enc_path) not in client.keys:
 		update_keys()
-		#enc_path = encrypt_path(path)
-		enc_path = path	#TODO: swap these two lines
-		
-		print "after re-fetching permissions"
-		print "FOPEN:", path
-		print "FOPEN:", enc_path
-		print "FOPEN:", client.keys
+		enc_path = encrypt_path(path)
+		if is_dir:
+			enc_path = get_metafile_path(enc_path)		
 		
 		if enc_path is None or strip_meta(enc_path) not in client.keys:
 			if mode == "r":
@@ -813,9 +509,7 @@ def api_fopen(path, mode):
 			else:	#mode == "w"
 				return api_create_file(path)	
 	
-	# come back here
-	
-	enc_log_path = log_path(enc_path)
+	enc_log_path = get_logfile_path(enc_path)
 	
 	if mode == "w" and client.keys[enc_path][1] is None:
 		print "you don't have write access"
@@ -830,7 +524,7 @@ def api_fopen(path, mode):
 		return False
 	
 	data = crypt.sym_dec(client.keys[enc_path][0], resp["DATA"])
-	print "DATA****************************", data
+	
 	parsed = parse_metadata_and_contents_for_file(data)
 	if parsed is None:
 		print "parse metadata failed"
@@ -852,9 +546,10 @@ def api_fopen(path, mode):
 		if resp is None:
 			print "downloadFile (log) failed"
 			return False
-		log_path_on_disk = log_path(contents_path_on_disk)
+		log_path_on_disk = get_logfile_path(contents_path_on_disk)
+		
 		data = crypt.sym_dec(client.keys[enc_path][1], resp["DATA"])
-		success = save_file(resp["DATA"], log_path_on_disk)
+		success = save_file(data, log_path_on_disk)
 		if not success:
 			print "save log on disk failed"
 			return False
@@ -865,44 +560,48 @@ def api_fopen(path, mode):
 		if mode == "r":
 			handle = open(contents_path_on_disk, "r")
 		else: #mode == "w"
-			handle = open(contents_path_on_disk, "w+")
+			handle = open(contents_path_on_disk, "a+")
 	except:
 		traceback.print_exc()
 		return False
 
 	try:
-		shutil.copy(contents_path_on_disk, original_path(contents_path_on_disk))
+		shutil.copy(contents_path_on_disk, get_original_path(contents_path_on_disk))
 	except:
 		traceback.print_exc()
 		return False
 
-	client.open_files[handle] = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, original_path(contents_path_on_disk), mode)
+	client.open_files[handle] = (
+		path,
+		enc_path,
+		metadata_map,
+		contents_path_on_disk,
+		log_path_on_disk,
+		get_original_path(contents_path_on_disk),
+		mode
+	)
 
 	return handle
 
 def api_fseek(handle, offset, whence=1):
-	
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
 	return handle.seek(offset,whence)
 
 def api_ftell(handle):
-	
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
 	return handle.tell()
 
 def api_fwrite(handle,data):
-	
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
 	return handle.write(data)
 	
 def api_fread(handle,n=None):
-	
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
@@ -912,36 +611,20 @@ def api_fread(handle,n=None):
 		return handle.read(n)
 
 def api_fflush(handle):
-	
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
 	handle.flush()
-	return api_fflush_helper(handle,0)
+	return api_fflush_helper(handle, 0)
 
-
-def test_fseek_ftell_fwrite_fread_fflush():
-	
-	data='n'
-	newfile=open('testingfile','w+')
-	api_fwrite(newfile,'this is a test of the fwrite function')
-	api_fflush(newfile)
-	api_fseek(newfile,0,0)
-	if api_fread(newfile,10)!='this is a ':
-		return False
-	if api_ftell(newfile)!=10:
-		return False
-	newfile.close()
-	return True
-
-def api_fflush_helper(handle, attempt_num):	#LEO???
-	
-	if client.loggedIn==False:
-		return 0
+def api_fflush_helper(handle, attempt_num):
+	if not client.loggedIn:
+		raise Exception("not logged in")
 	if attempt_num>1:
 		return 0
 	enc_path=client.open_files[handle][ENC_PATH]
-	enc_log_path=log_path(enc_path)
+	enc_log_path=get_logfile_path(enc_path)
+	
 	if client.keys[enc_path][1]==None:
 		return 0
 	success=handle.flush()
@@ -957,11 +640,12 @@ def api_fflush_helper(handle, attempt_num):	#LEO???
 	contents=api_fread(handle)
 	
 	#creating entire file fron contents and metadata and updating editnumber
-	client.open_files[handle][METADATA]['edit_number']=str(int(client.open_files[handle][METADATA]['edit_number'])+1)
+	client.open_files[handle][METADATA]['edit_number'] = str(int(client.open_files[handle][METADATA]['edit_number'])+1)
 	####update_checksum(handle,csk)
 	checksum=client.open_files[handle][METADATA]['checksum']
+	
 	edit_number=client.open_files[handle][METADATA]['edit_number']
-	cpk=client=client.open_files[handle][METADATA]['cpk']
+	cpk=client.open_files[handle][METADATA]['cpk']
 	data=crypt.watermark()+hex_string(checksum)+checksum+hex_string(edit_number)+edit_number+hex_string(cpk)+cpk+hex_string(contents)+contents
 	enc_data=crypt.sym_enc(client.keys[client.open_files[handle][ENC_PATH]][0],data)
 	
@@ -978,10 +662,10 @@ def api_fflush_helper(handle, attempt_num):	#LEO???
 	enc_log_data=crypt.sym_enc(client.keys[client.open_files[handle][ENC_PATH]][1],newlog)
 	
 	
-	message={'OP': "writeFile", 'ENC_USER': client.encUser,"PATH": enc_path,"SECRET": filepassw, "FILE_DATA": enc_data, "LOG_DATA": enc_log_data}
+	message={'OP': "writeFile", 'ENC_USER': client.encUser,"PATH": enc_path,"SECRET": filepassw, "FILE_DATA": enc_data[1], "LOG_DATA": enc_log_data[1]}
 	
 	
-	if send_to_server(message)==None:
+	if send_to_server(message) is None:
 		api_fflush_helper(handle, attempt_num+1)
 	
 	#updating the oldfile
@@ -991,45 +675,6 @@ def api_fflush_helper(handle, attempt_num):	#LEO???
 	api_fseek(handle,place_holder,0)
 	
 	return 1
-	
-
-
-def test_api_fflush_helper():
-	client.user='sally'
-	client.loggedIn=True
-	client.keys={}
-	client.encUser='sally'
-
-	# THIS TEST FAILS
-	return False
-	disk_place='testdifflog'
-	otherfile='testfile'
-	m=open(otherfile,'w+')
-	m.write('hey there!0x00000002210x0000000120x0000000130x000000014')
-	secrets=crypt.create_asym_key_pair()
-	people_secrets=crypt.create_asym_key_pair()
-	client.secrets['user_sk']=people_secrets[-1]
-	writesecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	readsecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	client.keys[encrypt_path(otherfile)]=[readsecret,writesecret]
-	filepassw=crypt.hash('abcdefghijklmnop')
-	client.open_files[m]=[otherfile,encrypt_path(otherfile),{'checksum':secrets[-1],'edit_number':'7','cpk':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1]},otherfile,disk_place,'boby','w+']
-	#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
-	# metadata_map is for accessing each part of metadata
-	
-	client.public_keys={'hi':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'bye':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'sally':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'tommy':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1]}
-	testdif=difflog.diff_log(secrets[-1],filepassw)
-	testdif.update_perm(['hi'],['bye'])
-	store=pickle.dumps(testdif)
-	store_len=hex_string(store)
-	pickledtestdif=crypt.watermark()+store_len+store
-	testing=open(disk_place,'w')
-	testing.write(pickledtestdif)
-	testing.close()
-	
-	print api_fflush_helper(m, 0)
-
-
 
 def api_fclose(handle):	# fclose
 	if not client.loggedIn:
@@ -1037,21 +682,12 @@ def api_fclose(handle):	# fclose
 
 	if client.loggedIn==False:
 		return (0,'client not logged int')
-	if client.open_files[handle][MODE]=='w+':
+	if client.open_files[handle][MODE]=='a+':
 		if api_fflush(handle)==0:
 			return (0,'couldnt flush')
 	del client.open_files[handle]
 	return handle.close()
 
-def test_api_fclose():
-	m=open('testing2','w+')
-	client.open_files[m]=[1,2,3,4,5,6,7]
-	print api_fclose(m)
-	try:
-		print client.open_files[m]
-		return 'doesnt work!'
-	except:
-		return True
 
 def api_chdir(path):
 	if not client.loggedIn:
@@ -1062,18 +698,16 @@ def api_chdir(path):
 	index = len(client_path_list)-len(spec_split)+1
 	client_path_list = client_path_list[:index]
 	client.working_dir = string.join(client_path_list, '/')
-	new_client_path = sanitize_path(spec_slit[-1])
+	new_client_path = resolve_path(spec_slit[-1])
 	
 	client.working_dir = new_client_path
-
-
 
 def api_mkdir(parent, new_dir_name):
 	if not client.loggedIn:
 		raise Exception("not logged in")	
 
-	directory=dir_path(path)
-	path_filename=path_name(path)
+	directory=get_parent_directory(path)
+	path_filename=split_path(path)[1]
 	enc_dir=encrypt_path(dir_path)
 	dir_handle=api_opendir(dir_path)
 	log_file=open(client.open_files[dir_handle][LOG_PATH_ON_DISK],'r')
@@ -1093,7 +727,7 @@ def api_mkdir(parent, new_dir_name):
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
 	
-	enc_path=encrypt_path(directory)+enc_filename
+	enc_path = encrypt_path(directory) + "/" + enc_filename
 	client.keys[enc_path]=(new_read_key,new_write_key)
 	store = pickle.dumps((enc_path, new_read_key, new_write_key))
 	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
@@ -1104,11 +738,27 @@ def api_mkdir(parent, new_dir_name):
 	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
 	checksum=create_checkSum(meta,'',secret[-1])
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
-	create_msg={"ENC_USER":client.encUser, "OP":"mkDir", "PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
+	create_msg={
+		"ENC_USER":client.encUser,
+		"OP":"mkDir",
+		"PARENT_SECRET":file_secret,
+		"SECRET":filepassw,
+		"LOG_DATA":enc_log,
+		"FILE_DATA":data,
+		"PATH": get_metafile_path(enc_path)}
 	if send_to_server(create_msg)==None:
 		return (0,'could not create file')
 	send_perm={}
-	new_message={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
+	
+	new_message = {
+		"ENC_USER":client.encUser,
+		"OP":"addPermissions",
+		"USERS_AND_PERMS":[my_new_perm],
+		"PATH": get_metafile_path(enc_path),
+		"SECRET": filepassw,
+		"LOG_DATA": enc_log
+	}
+	
 	if send_to_server(new_message)==None:
 		return (0,'my new permission')	
 	
@@ -1122,8 +772,8 @@ def api_mv(old_path, new_path):
 	if client.loggedIn==False:
 		return (0,'client not logged in')
 		
-	handle1=api_open(old_parent,'w+')
-	handle2=api_open(new_path,'w+')
+	handle1=api_open(old_parent,'a+')
+	handle2=api_open(new_path,'a+')
 	contents=api_fread(handle1)
 	client.open_files[handle2][METADATA]=client.open_files[handle1][METADATA]
 	client.open_files[handle2][LOG_PATH_ON_DISK]=client.open_files[handle1][LOG_PATH_ON_DISK]
@@ -1132,16 +782,12 @@ def api_mv(old_path, new_path):
 		return (0,'flush failed')
 	if api_rm(handle1)!=1:
 		return (0,'rm failed')
-		
-#def test_api_mv():
-	##cant test yet
-	pass
-
+	
 def api_opendir(path):
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
-	meta=meta_path(path)
+	meta=get_metafile_path(path)
 	return api_fopen(meta, 'w')
 	# TODO: api_fopen should take a prefix that it adds in front of encrypted thingy
 
@@ -1154,7 +800,7 @@ def api_rm(filename,parent_path=client.working_dir):
 	if client.loggedIn==False:
 		return (0,'client not logged int')
 		
-	parent_path=sanitize_path(parent_path)
+	parent_path=resolve_path(parent_path)
 	meta=api_opendir(parent_path)
 	totalpath=parent_path+filename
 	check=False
@@ -1170,17 +816,13 @@ def api_rm(filename,parent_path=client.working_dir):
 	log_data=log_file.read()
 	diff_obj=parse_log(log_data)
 	filepassw=diff_obj.password
-	if api_set_permissions(sanitize_path(meta_path(path)), meta, [], [],True)==False:
+	if api_set_permissions(resolve_path(get_metafile_path(path)), meta, [], [],True)[0] == 0:
 		return (0,'could not set permissions')
 	message={"ENC_USER":client.encUser, "OP":"Delete", "PARENT_SECRET":old_filepassw}
 	if send_to_server(message)==None:
 		return False
 	return True
 	
-	
-def test_api_rm():
-	###Can't be tested untill fopen is created
-	print api_rm('boby','a/b/c')	
 	
 
 def api_list_dir(path):
@@ -1256,45 +898,8 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 
 
 
-def test_read_and_write_to_log():
-
-	client.keys={}
-	#THIS DOESNT WORK ANYMORE
-	return False
-	#crypt.watermark()='hey there!'
-	disk_place='testdifflog'
-	otherfile='testfile'
-	m=open(otherfile,'w+')
-	secrets=crypt.create_asym_key_pair()
-	writesecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	readsecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	client.keys[encrypt_path(otherfile)]=[readsecret,writesecret]
-	filepassw=crypt.hash('abcdefghijklmnop')
-	client.open_files[m]=[otherfile,encrypt_path(otherfile),{'checksum':secrets[-1],'edit_number':'hithere','cpk':secrets[1]},otherfile,disk_place,'boby','w+']
-	
-	#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
-	# metadata_map is for accessing each part of metadata
-	testdif=difflog.diff_log(secrets[-1],filepassw)
-	testdif.update_perm(['hi'],['bye'])
-	store=pickle.dumps(testdif)
-	store_len=hex_string(store)
-	pickledtestdif=str(crypt.watermark()+store_len+store)
-	testing=open(disk_place,'w')
-	testing.write(pickledtestdif)
-	testing.close()
-	if read_permissions_list(m)!=[['hi'],['bye']]:
-		return False
-	writesecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	readsecret1=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	client.keys[encrypt_path(otherfile)]=[readsecret1,writesecret1]
-	write_permissions_and_secrets(m,[['a'],['b']],'someday','bob',writesecret)
-	if read_permissions_list(m)!=[['a'],['b']]:
-		return False
-	return True
-
 def update_checksum(handle,csk):
 	if True:
-
 		print client.open_files
 		hold_place=api_ftell(handle)
 		api_fseek(handle,0,0)
@@ -1306,74 +911,48 @@ def update_checksum(handle,csk):
 	else:
 		return False
 	
-def test_update_checksum():
-	#crypt.watermark()='HI there'
-	#THIS FAILS
-	return False
-
-	testing=open('testing','w+')
-	csk=crypt.create_asym_key_pair()[-1]
-	testing.write('HI there0x00000002210x0000000120x0000000130x000000014')
-	client.open_files[testing]=[1,2,{'checksum':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'cpk':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'edit_number':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1]}]
-	print update_checksum(testing,csk)
-	print 'done_updating'
-	api_fseek(testing,0,0)
-	print api_fread(testing)
-#test_send_to_server()
-#test_encrypt_path()
-#test_update_keys()
-#test_path_parent()
-#test_verify_and_create_checksum()
-#test_api_login()
-
-def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_my_permission=False):
+def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_permission=False):
 	
 	if not client.loggedIn:
 		raise Exception("not logged in")
-
+	path = client.open_files[handle][PATH]
+	is_directory = strip_path(path) != path
 	
-	if client.loggedIn==False:
-		return (0,'not logged in')
+	if delete_my_permission==False:
+		if client.enc_user not in new_writers_list:
+			new_writers_list.append(client.enc_user)
+		
 	permissions_list = read_permissions_list(handle)
 	if permissions_list==False:
 		return(0,'permissions could not be read')
-	enc_path = encrypt_path(path)
-	(old_readers_list, old_writers_list) = permissions_list
+		
+	enc_path = client.open_files[handle][ENC_PATH]
+	[old_readers_list, old_writers_list] = permissions_list
 	new_permissions = [new_readers_list, new_writers_list]
 
 	(old_read_key,old_write_key)=client.keys[enc_path]
-	(new_rk, new_wk) = (crypt.create_sym_key(client.passw, enc_path, client.user)[1], crypt.create_sym_key(client.passw+'writer', enc_path, client.user)[1])
+	(new_rk, new_wk) = (crypt.create_sym_key(client.passw, enc_path, client.user)[1],
+		crypt.create_sym_key(client.passa+'writer', enc_path, client.user)[1])
+	
+	#creates permissions to delete
 	old_permissions=[]
-	for readers in old_readers_list:
-		if readers not in old_writers_list:
-			reader=readers
-			store=pickle.dumps((enc_path,old_read_key,None))
+	for reader in old_readers_list:
+		if reader not in old_writers_list:
+			store=json.dumps((enc_path,old_read_key,None))
 			old_permissions.append((reader, crypt.sym_enc(client.public_keys[reader], store)))
-	
-			
-	for writers in old_writers_list:
-		writer=writers
-		store=pickle.dumps((enc_path,old_read_key,old_write_key))
+	for writer in old_writers_list:
+		store=json.dumps((enc_path,old_read_key,old_write_key))
 		old_permissions.append((writer,crypt.sym_enc(client.public_keys[writer], store)))
-	###old_permissions=json.dumps(old_permissions)
-	client.keys[path]=(new_rk, new_wk)
-	store = pickle.dumps((enc_path, new_rk, new_wk))
-	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
-	###my_new_perm=json.dumps(my_new_perm)
-	store = pickle.dumps((enc_path,old_read_key,old_write_key))
-	my_old_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
-	old_permissions.append(my_old_perm)
-	
+	client.keys[enc_path]=(new_rk, new_wk)
+
+	#creates new secret
 	new_filepassw=randomword(40)
-	(le,new_cpk,le2,new_csk)=crypt.create_asym_key_pair()
-	diff_old=open(client.open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff_old=diff.read()#crypt.sym_dec(client.keys[client.open_files[handle][ENC_PATH]][1],diff.read())
-	enc_diff_old=crypt.sym_enc(client.keys[enc_path][1],dec_diff)
+	(len_csk,new_csk,len_cpk,new_cpk)=crypt.create_asym_key_pair()
 	change=write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key)
+	new_diff=open(client.open_files[handle][LOG_PATH_ON_DISK],'r')
+	new_diff_data=new_diff.read()
+	enc_diff_new_data=crypt.sym_enc(client.keys[enc_path][1],new_diff_data)
 	
-	diff=open(client.open_files[handle][LOG_PATH_ON_DISK],'r')
-	dec_diff=diff.read()#crypt.sym_dec(client.keys[client.open_files[handle][ENC_PATH]][1],diff.read())
-	enc_diff=crypt.sym_enc(client.keys[enc_path][1],dec_diff)
 	if change==False:
 		return (0,'could not change permissions')
 	else:
@@ -1384,39 +963,41 @@ def api_set_permissions(path, handle, new_readers_list, new_writers_list,delete_
 		return (0,'could not update checksum')
 	
 	new_permissions=[]
-	for readers in new_readers_list:
-		reader=readers
-		if readers not in new_writers_list:
-			store=pickle.dumps((enc_path,old_read_key,None))
-			new_permissions.append((reader, crypt.sym_enc(client.public_keys[readers], store)))
+	for reader in new_readers_list:
+		if reader not in new_writers_list:
+			store=json.dumps((enc_path,new_read_key,None))
+			new_permissions.append((reader, crypt.sym_enc(client.public_keys[reader], store)))
 	
-	for writers in new_writers_list:
-		store=pickle.dumps((enc_path,old_read_key,old_write_key))
-		writer=writers
+	for writer in new_writers_list:
+		store=json.dumps((enc_path,new_read_key,new_write_key))
 		new_permissions.append((writer,crypt.sym_enc(client.public_keys[writer], store)))
 
-
-	if delete_my_permission==False:
-		new_message={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
-		if send_to_server(new_message)==None:
-			return (0,'my new permission')
+	add_perm = {
+		"ENC_USER":client.encUser,
+		"OP":"addPermissions",
+		"USERS_AND_PERMS":new_permissions,
+		"PATH": enc_path,
+		"SECRET": old_filepassw,
+		"LOG_DATA": enc_diff_new_data
+	}
 			
-	change_secret={"ENC_USER":client.encUser, "OP":"changeFileSecret", "NEW_SECRET":old_filepassw,"OLD_SECRET":new_filepassw}
+	add_perm_resp = send_to_server(add_perm)
+	
+	change_secret = {"ENC_USER":client.encUser, "OP":"changeFileSecret",
+		"NEW_SECRET":old_filepassw,"OLD_SECRET":new_filepassw}
 	if send_to_server(change_secret)==None:
 		return (0,'changing the secret')
-	##change the key
-	if api_fflush(handle)==None:
-		return (0,'flushing log')
 		
-	removed_perm={"ENC_USER":client.encUser, "OP":"deletePermissions", "USERS_AND_PERMS":old_permissions}
-	if send_to_server(removed_perm)==None:
+	removed_perms={"ENC_USER":client.encUser,
+		"OP":"deletePermissions",
+		"USERS_AND_PERMS":old_permissions,
+		"PATH": enc_path,
+		"SECRET": new_filepassw,
+		"LOG_DATA": enc_diff_new_data}
+
+	if send_to_server(removed_perms)==None:
 		return (0,'revoking permissions')
-
-	added_perm={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":new_permissions}
-	if send_to_server(added_perm)==None:
-		return (0,'adding new permissions')
-
-	return 1
+	return (1,'yay!')
 
 def api_list_permissions(handle):
 	
@@ -1425,40 +1006,6 @@ def api_list_permissions(handle):
 
 	return read_permissions_list(handle)
 
-def test_set_perms():
-	client.user='sally'
-	client.loggedIn=True
-	client.keys={}
-	client.encUser='sally'
-
-	#crypt.watermark()='hey there!'
-	#this fails
-	return False
-	disk_place='testdifflog'
-	otherfile='testfile'
-	m=open(otherfile,'w+')
-	m.write('hey there!0x00000002210x0000000120x0000000130x000000014')
-	secrets=crypt.create_asym_key_pair()
-	writesecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	readsecret=crypt.create_sym_key('asdfjklasdfjkl', 'sally', 'aaaaaaaa')[1]
-	client.keys[encrypt_path(otherfile)]=[readsecret,writesecret]
-	filepassw=crypt.hash('abcdefghijklmnop')
-	client.open_files[m]=[otherfile,encrypt_path(otherfile),{'checksum':secrets[-1],'edit_number':'hithere','cpk':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1]},otherfile,disk_place,'boby','w+']
-	#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
-	# metadata_map is for accessing each part of metadata
-	
-	client.public_keys={'hi':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'bye':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'sally':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1],'tommy':crypt.create_sym_key(randomword(40), randomword(40), randomword(40))[1]}
-	testdif=difflog.diff_log(secrets[-1],filepassw)
-	testdif.update_perm(['hi'],['bye'])
-	store=pickle.dumps(testdif)
-	store_len=hex_string(store)
-	pickledtestdif=crypt.watermark()+store_len+store
-	testing=open(disk_place,'w')
-	testing.write(pickledtestdif)
-	testing.close()
-	
-	print api_set_permissions(otherfile, m, ['sally'], ['tommy'],False)
-#test_set_perms()
 
 
 #### so we can edit in any way we want
@@ -1490,16 +1037,6 @@ def import_and_flush(number,text_file):
 	api_fflush(handle)
 	del client.export_files[number]
 	return 1
-
-
-def test_import_and_export():
-	pass
-	
-def path_name(path):
-	print path, "****"
-	newpath=newpath=sanitize_path(path).split('/')
-	name=newpath.pop(-1)
-	return name
 	
 	
 def api_create_file(path):
@@ -1507,16 +1044,18 @@ def api_create_file(path):
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
-	directory=dir_path(path)
+	directory=get_parent_directory(path)
 	print directory
-	path_filename=path_name(path)
+	path_filename=split_path(path)[1]
 	print path_filename
 	enc_dir=encrypt_path(directory)
 	print enc_dir
-	return "blah"
 	dir_handle=api_opendir(directory)
 	log_file=open(client.open_files[dir_handle][LOG_PATH_ON_DISK],'r')
 	data=log_file.read()
+	print "-------------------------------------------"
+	print data
+	print "-------------------------------------------"
 	diff_obj=parse_log(data)
 	parent_secret=diff_obj.password
 	api_fread(dir_handle)
@@ -1534,7 +1073,7 @@ def api_create_file(path):
 	
 	enc_path=encrypt_path(directory)+enc_filename
 	client.keys[enc_path]=(new_read_key,new_write_key)
-	store = pickle.dumps((enc_path, new_read_key, new_write_key))
+	store = json.dumps((enc_path, new_read_key, new_write_key))
 	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
 	new_log=difflog.diff_log(secret[-1],filepassw)
 	new_log.update_perm([],[my_new_perm])
@@ -1543,24 +1082,17 @@ def api_create_file(path):
 	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
 	checksum=create_checkSum(meta,'',secret[-1])
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
-	create_msg={"ENC_USER":client.encUser, "OP":"createFile", "PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
+	create_msg={"ENC_USER":client.encUser, "OP":"createFile", 
+		"PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
+	
 	if send_to_server(create_msg)==None:
 		return (0,'could not create file')
-	send_perm={}
-	new_message={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm}
-	if send_to_server(new_message)==None:
+	perm_msg={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm,
+		"SECRET":file_secret,"LOG_DATA":enc_log}
+	if send_to_server(perm_msg)==None:
 		return (0,'my new permission')	
 	
 	return api_fopen(path)
 
-#def test_api_create_file():
-#	#need api_fopen to test
-#	print api_create_file('/a/b/c')
-#print 'testing createfile'
-#test_api_create_file()
- 
-#test_update_keys()
-
 if __name__ == "__main__":
-	test_api_create_user()
-	
+	pass
