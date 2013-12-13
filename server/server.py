@@ -10,6 +10,7 @@ import json
 import sys
 import thread
 import threading
+import shutil
 
 from msg import *
 from db import *
@@ -189,15 +190,28 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 
 			elif op == 'changeFileSecret':
 				path = ('users' + msg_obj['PATH'])
+				new_path = ('users' + msg_obj['NEW_PATH'])
 				if not os.path.exists(path):
 					response['ERROR'] = "Folder or file " + path + " does not exist"
 					response['STATUS'] = 1
 				elif os.path.isdir(path):
 					meta_file = get_metafile_path(path)
-					if not (update_write_key(path, msg_obj["SECRET"], msg_obj["NEW_SECRET"]) and\
-									update_write_key(meta_file, msg_obj["SECRET"], msg_obj["NEW_SECRET"])):
+					new_meta_file = get_metafile_path(new_path)
+					if not (update_write_key(new_path, msg_obj["SECRET"], msg_obj["NEW_SECRET"]) and\
+									update_write_key(new_meta_file, msg_obj["SECRET"], msg_obj["NEW_SECRET"])):
 						response['ERROR'] = "Incorrect secret for " + path
 						response['STATUS'] = 1
+				else:
+					if not update_write_key(path, msg_obj["SECRET"], msg_obj["NEW_SECRET"]):
+						response['ERROR'] = "Incorrect secret for " + path
+						response['STATUS'] = 1
+					try:
+						print "MOVING ", path, new_path
+						shutil.move(path, new_path)
+						
+					except:
+						traceback.print_exc()
+						pass
 					
 			elif op =='mkdir':
 				path = ('users' + msg_obj['PATH'])
