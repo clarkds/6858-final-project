@@ -54,10 +54,6 @@ class FileClient(cmd.Cmd):
 												"share":"[user][file]",\
 												"logout":""}
 
-
-	def do_logout(self, arg):
-		return True
-
 	def do_help(self, arg):
 		print "Supported commands:"
 		for i in self.help_message.keys():
@@ -68,13 +64,16 @@ class FileClient(cmd.Cmd):
 		if len(args) == 0:
 			dir_contents = api_list_dir(self.current_dir)
 		elif len(args) == 1:
-			path = get_absolute_path(self.current_dir, args[0])
-			if api_path_exists(path):
+			try:
 				dir_contents = api_list_dir(path)
-			else:
+			except:
 				print "No such file or directory"
+				return
+		else:
+			print "Error"
+			return
 		ret = ""
-		for  in dir_contents:
+		for  (name, ftype) in dir_contents:
 			ret = ret + name + '\t'
 		print ret
 			
@@ -84,65 +83,99 @@ class FileClient(cmd.Cmd):
 			self.current_dir = "/" + username
 		elif len(args) == 1:
 			path = get_absolute_path(self.current_dir, args[0])
-			if api_path_exists(path):
-				self.current_dir = get_absolute_path(self.current_dir, args[0])
-			else:
+			try:
+				api_list_dir(path)
+				self.current_dir = path
+				self.prompt = "file-server:" + self.current_dir + " " + self.username + "$ "
+			except:
 				print "No such file or directory"
-		self.prompt = "file-server:" + self.current_dir + " " + self.username + "$ "
+				return
 
 	def do_touch(self, arg):
 		args = parse(arg)
 		if len(args) == 1:
-			api_create_file(get_absolute_path(self.current_dir, args[0]))
+			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+			try:
+				api_list_dir(path)
+				print "N"
+				handle = api_create_file(get_absolute_path(path, fname))
+				print "U"
+				api_fflush(handle)
+				print "T"
+				api_close(handle)
+				print "E"
+			except:
+				print "No such file or directory"
 		else:
 			print "Error"
 	
 	def do_rm(self, arg):
 		args = parse(arg)
 		if len(args) == 1:
-			api_rm(get_parent_directory(get_absolute_path(self.current_dir, args[0])), get_absolute_path(self.current_dir, args[0]).split('/')[-1])
+			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+			try:
+				api_list_dir(path)
+				api_rm(get_absolute_path(path, fname))
+			except:
+				print "No such file or directory"
 		else:
 			print "Error"
 	
 	def do_mv(self, arg):
 		args = parse(arg)
 		if len(args) == 2:
-			api_mv(get_absolute_path(args[0]), get_absolute_path(args[1]))
+			(path1, fname1) = split_path(get_absolute_path(self.current_dir, args[0]))
+			(path2, fname2) = split_path(get_absolute_path(self.current_dir, args[1]))
+			try:
+				print path1
+				api_list_dir(path1)
+				print path2
+				api_list_dir(path2)
+				print "done!"
+				api_mv(get_absolute_path(path1, fname1), get_absolute_path(path2, fname2))
+			except:
+				print "No such file or directory"
 		else:
 			print "Error"
 
 	def do_mkdir(self, arg):
 		args = parse(arg)
 		if len(args) == 1:
-			api_mkdir("/" + get_absolute_path(self.current_dir, args[0]))
+			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+			try:
+				api_list_dir(path)
+				api_mkdir(get_absolute_path(self.current_dir, args[0]))
+			except:
+				print "No such file or directory"
 		else:
 			print "Error"
 	
 	def do_vim(self, arg):
 		args = parse(arg)
 		if len(args) == 1:
-			EDITOR = os.environ.get('EDITOR','vim') #that easy!
-			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
-			contents = api_fread(handle)
+			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+			try:
+				api_list_dir(path)
+				EDITOR = os.environ.get('EDITOR','vim') #that easy!
+				handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
+				contents = api_fread(handle)
 
-			tempfile = open('.temp.'+args[0],'w')
-			tempfile.write(contents)
-			tempfile.flush()
-			call([EDITOR, tempfile.name])
-			tempfile.flush()
-			tempfile.close()
-			tempfile = open('.temp.'+split_path(args[0])[1],'r')
-			new_contents = tempfile.read()
-			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'w')
-			api_fwrite(handle, new_contents)
-			api_fflush(handle)
-			api_fclose(handle)
-
-  
-	def do_emacs(self, arg):
-		args = parse(arg)
-		pass
-	
+				tempfile = open('.temp.'+args[0],'w')
+				tempfile.write(contents)
+				tempfile.flush()
+				call([EDITOR, tempfile.name])
+				tempfile.flush()
+				tempfile.close()
+				temp_filename = '.temp.'+split_path(args[0])[1]
+				tempfile = open(temp_filename,'r')
+				new_contents = tempfile.read()
+				handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'w')
+				api_fwrite(handle, new_contents)
+				api_fflush(handle)
+				api_fclose(handle)
+				os.remove(temp_filename)
+			except:
+ 				print "No such file or directory" 
 	def do_share(self, arg):
 		args = parse(arg)
 		pass

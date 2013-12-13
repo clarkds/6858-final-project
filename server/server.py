@@ -223,6 +223,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 
 			elif op =='ls':
 				path = ('users' + msg_obj['PATH'])
+				path = sanitize_path(path)
 				if os.path.exists(path) and os.path.isdir:
 					gen = os.walk(path)
 					(root, dirs, files) = gen.next()
