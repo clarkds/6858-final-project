@@ -174,6 +174,36 @@ class FileClient(cmd.Cmd):
 		api_logout()
 		return True
 		
+	def do_verify(self,arg):
+		args = parse(arg)
+		if len(args) == 1:
+			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+			try:
+				handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
+				if not verify_file(handle):
+					raise Exception('Verify Failed')
+				print "file verified"
+			except Exception as inst:
+				print type(inst)
+				print inst
+		else:
+			print "Error: too many args"
+			
+	def do_rebuild(self,arg):
+		args = parse(arg)
+		if len(args) == 1:
+			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+			try:
+				handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
+				if not verify_file(handle):
+					raise Exception('Verify Failed: Difflog inconsistent')
+				rebuild_file(handle, True)
+			except Exception as inst:
+				print type(inst)
+				print inst
+		else:
+			print "Error: too many args"
+		
 def start_new_client():
 	test = LoginClient()
 	test.cmdloop()
