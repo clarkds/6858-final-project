@@ -962,43 +962,44 @@ def update_checksum(handle,csk):
 	else:
 		return False
 	
-def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_permission=False):
+def api_set_permissions(handle, new_readers_list, new_writers_list, delete_my_permission=False):
 	
+	print client.public_keys
+	print '-------------------------------'
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	path = client.open_files[handle][PATH]
-	is_directory = strip_path(path) != path
 	
-	if delete_my_permission==False:
-		if client.enc_user not in new_writers_list:
-			new_writers_list.append(client.enc_user)
+	if delete_my_permission == False:
+		if client.encUser not in new_writers_list:
+			new_writers_list.append(client.user)
 		
 	permissions_list = read_permissions_list(handle)
-	if permissions_list==False:
+	if permissions_list == False:
 		return(0,'permissions could not be read')
 		
 	enc_path = client.open_files[handle][ENC_PATH]
 	[old_readers_list, old_writers_list] = permissions_list
 	new_permissions = [new_readers_list, new_writers_list]
 
-	(old_read_key,old_write_key)=client.keys[enc_path]
+	(old_read_key,old_write_key) = client.keys[enc_path]
 	(new_rk, new_wk) = (crypt.create_sym_key(client.passw, enc_path, client.user)[1],
-		crypt.create_sym_key(client.passa+'writer', enc_path, client.user)[1])
+		crypt.create_sym_key(client.passw+'writer', enc_path, client.user)[1])
 	
 	#creates permissions to delete
 	old_permissions=[]
 	for reader in old_readers_list:
 		if reader not in old_writers_list:
 			store=json.dumps((enc_path,old_read_key,None))
-			old_permissions.append((reader, crypt.asym_enc_long(client.public_keys[reader], store)[1]))
+			old_permissions.append((reader, crypt.asym_enc_long(client.public_keys[reader[0]], store)[1]))
 	for writer in old_writers_list:
 		store=json.dumps((enc_path,old_read_key,old_write_key))
-		old_permissions.append((writer,crypt.asym_enc_long(client.public_keys[writer], store)[1]))
+		old_permissions.append((writer,crypt.asym_enc_long(client.public_keys[writer[0]], store)[1]))
 	client.keys[enc_path]=(new_rk, new_wk)
 
 	#creates new secret
 	new_filepassw=randomword(40)
-	(len_csk,new_csk,len_cpk,new_cpk)=crypt.create_asym_key_pair()
+	(len_cpk,new_cpk,len_csk,new_csk)=crypt.create_asym_key_pair()
 	change=write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,old_write_key)
 	new_diff=open(client.open_files[handle][LOG_PATH_ON_DISK],'r')
 	new_diff_data=new_diff.read()
@@ -1016,12 +1017,12 @@ def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_per
 	new_permissions=[]
 	for reader in new_readers_list:
 		if reader not in new_writers_list:
-			store=json.dumps((enc_path,new_read_key,None))
-			new_permissions.append((reader, crypt.asym_enc_long(client.public_keys[reader], store)[1]))
+			store=json.dumps((enc_path,new_rk,None))
+			new_permissions.append((reader, crypt.asym_enc_long(client.public_keys[crypt.det(reader)], store)[1]))
 	
 	for writer in new_writers_list:
-		store=json.dumps((enc_path,new_read_key,new_write_key))
-		new_permissions.append((writer,crypt.asym_enc_long(client.public_keys[writer], store)[1]))
+		store=json.dumps((enc_path,new_rk,new_wk))
+		new_permissions.append((writer,crypt.asym_enc_long(client.public_keys[crypt.det(writer)], store)[1]))
 
 	add_perm = {
 		"ENC_USER":client.encUser,
@@ -1029,13 +1030,13 @@ def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_per
 		"USERS_AND_PERMS":new_permissions,
 		"PATH": enc_path,
 		"SECRET": old_filepassw,
-		"LOG_DATA": enc_diff_new_data
+		"LOG_DATA": enc_diff_new_data[1]
 	}
 			
 	add_perm_resp = send_to_server(add_perm)
 	
 	change_secret = {"ENC_USER":client.encUser, "OP":"changeFileSecret",
-		"NEW_SECRET":old_filepassw,"OLD_SECRET":new_filepassw}
+		"NEW_SECRET":old_filepassw,"OLD_SECRET":new_filepassw,"PATH":enc_path}
 	if send_to_server(change_secret)==None:
 		return (0,'changing the secret')
 		
@@ -1044,7 +1045,7 @@ def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_per
 		"USERS_AND_PERMS":old_permissions,
 		"PATH": enc_path,
 		"SECRET": new_filepassw,
-		"LOG_DATA": enc_diff_new_data}
+		"LOG_DATA": enc_diff_new_data[1]}
 
 	if send_to_server(removed_perms)==None:
 		return (0,'revoking permissions')

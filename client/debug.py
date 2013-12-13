@@ -64,3 +64,17 @@ list1 = api2.api_list_dir('/leo1')
 list2 = api2.api_list_dir('/leo1/twinkies')
 print "list1", list1
 print "list2", list2
+
+api2.api_logout()
+api2.api_create_user('leo2','111111')
+api2.api_logout()
+api2.api_login("leo1", "111111")
+handle = api2.api_fopen("/leo1/t3", "w")
+api2.api_set_permissions(handle, ["leo2"], [])
+
+api2.api_fflush(handle)
+api2.api_fclose(handle)
+api2.api_logout()
+
+api2.api_login("leo2", "111111")
+handle = api2.api_fopen("/leo1/t4", "r")
