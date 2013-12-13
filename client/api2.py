@@ -684,7 +684,7 @@ def api_fflush_helper(handle, attempt_num):
 	pickled=pickle.dumps(diff_obj)
 	#updating log file on local disk
 	update_log_file=open(client.open_files[handle][LOG_PATH_ON_DISK],'w')
-	update_log_file.write(pickled)
+	update_log_file.write(crypt.watermark()+hex_string(pickled)+pickled)
 	update_log_file.close()
 	
 	newlog=crypt.watermark()+hex_string(pickled)+pickled
@@ -715,6 +715,8 @@ def api_fclose(handle):	# fclose
 		if api_fflush(handle)==0:
 			return (0,'couldnt flush')
 	del client.open_files[handle]
+	print 'FCLOSE----------------'
+	print client.loggedIn
 	return handle.close()
 
 
@@ -747,6 +749,7 @@ def api_mkdir(path):
 	parent_secret = diff_obj.password
 	api_fread(dir_handle)
 	api_fwrite(dir_handle,'\n add'+dir_name+'\n')
+	api_fflush(dir_handle)
 	api_fclose(dir_handle)
 	
 	#Create filepassw
@@ -828,34 +831,35 @@ def api_opendir(path):
 	# TODO: api_fopen should take a prefix that it adds in front of encrypted thingy
 
 
-def api_rm(filename,parent_path=client.working_dir):
+def api_rm(path):
+	print client.loggedIn
+	#if not client.loggedIn:
+	#	raise Exception("not logged in")
 	
-	if not client.loggedIn:
-		raise Exception("not logged in")
-		
-	if client.loggedIn==False:
-		return (0,'client not logged int')
-		
-	parent_path=resolve_path(parent_path)
-	meta=api_opendir(parent_path)
-	totalpath=parent_path+filename
-	check=False
-	for m in client.open_files:
-		if m[CONTENTS_PATH_ON_DISK]==totalpath:
-			check=True
-	if check==True:
+	path = resolve_path(path)
+	(parent_path, filename) = split_path(path)
+	meta = api_opendir(parent_path)
+	check = False
+	for m in client.open_files.keys():
+		if client.open_files[m][PATH] == path:
+			check = True
+			break
+	if check == True:
 		return (0,'file cannot be removed because it is open')
+	print client.loggedIn
+	print '----------------------------------------------'
 	api_fread(meta)
-	api_fwrite(meta,'\nrm filename\n')
+	api_fwrite(meta,'\nrm '+filename+'\n')
 	api_fflush(meta)
-	log_file=open(client.open_files[meta][LOG_PATH_ON_DISK],'r')
-	log_data=log_file.read()
-	diff_obj=parse_log(log_data)
-	filepassw=diff_obj.password
-	if api_set_permissions(resolve_path(get_metafile_path(path)), meta, [], [],True)[0] == 0:
-		return (0,'could not set permissions')
-	message={"ENC_USER":client.encUser, "OP":"Delete", "PARENT_SECRET":old_filepassw}
-	if send_to_server(message)==None:
+	log_file = open(client.open_files[meta][LOG_PATH_ON_DISK],'r')
+	log_data = log_file.read()
+	diff_obj = parse_log(log_data)
+	filepassw = diff_obj.password
+	#TODO: test this
+	#if api_set_permissions(resolve_path(get_metafile_path(path)), meta, [], [],True)[0] == 0:
+	#	return (0,'could not set permissions')
+	message = {"ENC_USER":client.encUser, "OP":"delete", "PARENT_SECRET":filepassw, "PATH":encrypt_path(path)}
+	if send_to_server(message) == None:
 		return False
 	return True
 	

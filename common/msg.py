@@ -8,14 +8,31 @@ SERVER_PORT = 5007
 PADDED_HEX_STR_SIZE = 20
 
 # read exactly nbytes from socket s, return as string
-def blockRead(s, nbytes):
+def blockRead_bad(s, nbytes):
 	buf = bytearray(nbytes)
+	print "1"
 	view = memoryview(buf)
+	print "2"
 	while nbytes > 0:
+		print "4"
 		count = s.recv_into(view, nbytes)
+		print "5"
 		view = view[nbytes:] # slicing views is cheap
+		print "6"
 		nbytes -= count
+		print "7"
+	print "3"
 	return buf.decode("utf-8")
+
+def blockRead(s, nbytes):
+	buf = ""
+	while nbytes > 0:		
+		readval = s.recv(min(4096, nbytes))
+		count = len(readval)
+		nbytes -= count
+		buf += readval
+	return buf
+	#return buf.decode("utf-8")
 
 # construct message from object
 # message format:
