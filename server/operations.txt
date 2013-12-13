@@ -5,6 +5,8 @@ createUser
 		PASSWORD
 		SECRET
 		KEY
+		META_DATA - for the meta file of the home directory
+		LOG_DATA - for the meta file
 	response
 
 loginUser
@@ -59,7 +61,7 @@ createFile: #creates a new file on the server
 		PATH
 		PARENT_SECRET
 		SECRET
-		DATA
+		FILE_DATA
 		LOG_DATA
 	response
 

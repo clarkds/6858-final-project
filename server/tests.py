@@ -39,7 +39,7 @@ def create_user_test():
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log_.meta_test"})["DATA"] == "Added test.txt"
 
 	# Make /asaj/test/test.txt and write to it
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createFile", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "SECRET":"12345", "LOG_DATA":"Created", "DATA":"Checksum"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createFile", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "SECRET":"12345", "LOG_DATA":"Created", "FILE_DATA":"Checksum"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "FILE_DATA":"This is a test", "LOG_DATA":"Added this is a test"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/test.txt"})["DATA"] == "This is a test"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log_test.txt"})["DATA"] == "Added this is a test"
@@ -69,8 +69,11 @@ def create_user_test():
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.meta_test"})["DATA"] == ""
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log_.meta_test"})["DATA"] == "deleted test.txt"
 
+	# Change the secret for /asaj/test
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"changeFileSecret", "PATH":"/asaj/test", "SECRET":"54321", "NEW_SECRET":"88888"})["STATUS"] == 0
+
 	# Delete /asaj/test/test.txt
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"88888"})["STATUS"] == 0
 
 	# Update meta for /asaj in preperation for deleting /asaj/test
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/.meta_asaj", "SECRET":"00000", "FILE_DATA":"", "LOG_DATA":"deleted test"})["STATUS"] == 0

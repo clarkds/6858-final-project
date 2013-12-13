@@ -75,10 +75,9 @@ def add_write_key(path, key):
 def update_write_key(path, key, new_key):
 	if check_write_key(path, key):
 		db = writekey_setup()
-		existing_key = db.query(WriteKey).get(path)
-		existing_key.key = key
-		db.add(key)
+		existing_key = db.query(WriteKey).filter(WriteKey.path == path).delete()
 		db.commit()
+		add_write_key(path, new_key)
 		return True
 	else:
 		return False

@@ -144,7 +144,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['STATUS'] = 1
 				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
 					write_file_contents(log_file, msg_obj['LOG_DATA'])
-					write_file_contents(path, msg_obj['DATA'])
+					write_file_contents(path, msg_obj['FILE_DATA'])
 					add_write_key(path, msg_obj['SECRET'])
 				else:
 					response['ERROR'] = "Incorrect secret for " + parent_dir
@@ -192,9 +192,12 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 				if not os.path.exists(path):
 					response['ERROR'] = "Folder or file " + path + " does not exist"
 					response['STATUS'] = 1
-				elif not update_write_key(path, msg_obj["SECRET"], msg_obj["NEW_SECRET"]):
-					response['ERROR'] = "Incorrect secret for " + path
-					response['STATUS'] = 1
+				elif os.path.isdir(path):
+					meta_file = get_metafile_path(path)
+					if not (update_write_key(path, msg_obj["SECRET"], msg_obj["NEW_SECRET"]) and\
+									update_write_key(meta_file, msg_obj["SECRET"], msg_obj["NEW_SECRET"])):
+						response['ERROR'] = "Incorrect secret for " + path
+						response['STATUS'] = 1
 					
 			elif op =='mkdir':
 				path = ('users' + msg_obj['PATH'])
