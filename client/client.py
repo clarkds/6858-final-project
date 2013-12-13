@@ -151,10 +151,10 @@ class FileClient(cmd.Cmd):
 			print "Error: mkdir takes argument(s) " + self.help_message["mkdir"]
 	
 	def do_vim(self, arg):
-		run_editor('vim', arg)
+		run_editor('vim', arg, self.current_dir, self.help_message)
 
 	def do_emacs(self, arg):
-		run_editor('emacs', arg)
+		run_editor('emacs', arg, self.current_dir, self.help_message)
 
 	def do_logout(self, arg):
 		api_logout()
@@ -190,14 +190,14 @@ class FileClient(cmd.Cmd):
 		else:
 			print "Error: rebuild takes argument(s) " + self.help_message["rebuild"]
 		
-def run_editor(which, arg):
+def run_editor(which, arg, current_dir, help_message):
 	args = parse(arg)
 	if len(args) == 1:
-		(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+		(path, fname) = split_path(get_absolute_path(current_dir, args[0]))
 		try:
 			api_list_dir(path)
 			EDITOR = os.environ.get('EDITOR', which) #that easy!
-			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
+			handle = api_fopen(get_absolute_path(current_dir, args[0]),'r')
 			contents = api_fread(handle)
 
 			tempfile = open('.temp.'+args[0],'w')
@@ -209,7 +209,7 @@ def run_editor(which, arg):
 			temp_filename = '.temp.'+split_path(args[0])[1]
 			tempfile = open(temp_filename,'r')
 			new_contents = tempfile.read()
-			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'w')
+			handle = api_fopen(get_absolute_path(current_dir, args[0]),'w')
 			api_fwrite(handle, new_contents)
 			api_fflush(handle)
 			api_fclose(handle)
@@ -217,7 +217,7 @@ def run_editor(which, arg):
 		except:
 			print "No such file or directory"
 	else:
-		print "Error: " + which + " takes argment(s) " + self.help_message[which]
+		print "Error: " + which + " takes argment(s) " + help_message[which]
 
 def start_new_client():
 	test = LoginClient()
