@@ -193,7 +193,7 @@ def update_keys():
 	if resp is None:
 		return False
 	for perm_tuple in resp["PERMISSIONS"]:
-		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec(client.secrets["user_sk"], perm_tuple[2]))
+		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec_long(client.secrets["user_sk"], perm_tuple[2]))
 		client.keys[enc_pathname] = (read_key, write_key)
 		
 	enc_path_list = client.keys.keys()
@@ -365,7 +365,7 @@ def api_create_user(user, passw):	# LEO
 	filepassw=randomword(40)
 	client.keys['/'+crypt.det(user)]=(new_read_key,new_write_key)
 	store = json.dumps(("/" + crypt.det(client.user), new_read_key, new_write_key))
-	my_new_perm  = (client.encUser, crypt.asym_enc(user_pk,store)[1])
+	my_new_perm  = (client.encUser, crypt.asym_enc_long(user_pk,store)[1])
 	new_log=difflog.diff_log(secret[1],filepassw)
 	new_log.update_perm([],[my_new_perm])
 	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))[1]
@@ -736,7 +736,7 @@ def api_mkdir(parent, new_dir_name):
 	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
 
 	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
-	checksum=create_checkSum(meta,'',secret[-1])
+	checksum=create_checksum(meta,'',secret[-1])
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
 	create_msg={
 		"ENC_USER":client.encUser,
@@ -939,10 +939,10 @@ def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_per
 	for reader in old_readers_list:
 		if reader not in old_writers_list:
 			store=json.dumps((enc_path,old_read_key,None))
-			old_permissions.append((reader, crypt.sym_enc(client.public_keys[reader], store)))
+			old_permissions.append((reader, crypt.asym_enc_long(client.public_keys[reader], store)[1]))
 	for writer in old_writers_list:
 		store=json.dumps((enc_path,old_read_key,old_write_key))
-		old_permissions.append((writer,crypt.sym_enc(client.public_keys[writer], store)))
+		old_permissions.append((writer,crypt.asym_enc_long(client.public_keys[writer], store)[1]))
 	client.keys[enc_path]=(new_rk, new_wk)
 
 	#creates new secret
@@ -966,11 +966,11 @@ def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_per
 	for reader in new_readers_list:
 		if reader not in new_writers_list:
 			store=json.dumps((enc_path,new_read_key,None))
-			new_permissions.append((reader, crypt.sym_enc(client.public_keys[reader], store)))
+			new_permissions.append((reader, crypt.asym_enc_long(client.public_keys[reader], store)[1]))
 	
 	for writer in new_writers_list:
 		store=json.dumps((enc_path,new_read_key,new_write_key))
-		new_permissions.append((writer,crypt.sym_enc(client.public_keys[writer], store)))
+		new_permissions.append((writer,crypt.asym_enc_long(client.public_keys[writer], store)[1]))
 
 	add_perm = {
 		"ENC_USER":client.encUser,
@@ -999,14 +999,11 @@ def api_set_permissions(handle, new_readers_list, new_writers_list,delete_my_per
 		return (0,'revoking permissions')
 	return (1,'yay!')
 
-def api_list_permissions(handle):
-	
+def api_list_permissions(handle):	
 	if not client.loggedIn:
 		raise Exception("not logged in")
 
 	return read_permissions_list(handle)
-
-
 
 #### so we can edit in any way we want
 def export(handle,text_file):
@@ -1057,13 +1054,15 @@ def api_create_file(path):
 	print data
 	print "-------------------------------------------"
 	diff_obj=parse_log(data)
+	
+	print log_file, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
+	
 	parent_secret=diff_obj.password
 	api_fread(dir_handle)
 	api_fwrite(dir_handle,'\n add'+path_filename+'\n')
 	api_fflush(dir_handle)
 	
-	#Create filepassw
-	filepassw=randomword(40)
+	file_secret = randomword(40)
 	#create csk and cpk
 	secret=crypt.create_asym_key_pair()
 	#create read and write key
@@ -1071,28 +1070,40 @@ def api_create_file(path):
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
 	
-	enc_path=encrypt_path(directory)+enc_filename
+	enc_path = encrypt_path(directory) + "/" + enc_filename
 	client.keys[enc_path]=(new_read_key,new_write_key)
 	store = json.dumps((enc_path, new_read_key, new_write_key))
-	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
-	new_log=difflog.diff_log(secret[-1],filepassw)
+	
+	print client.public_keys[client.encUser]
+	print store[1]
+	
+	my_new_perm  = (client.encUser, crypt.asym_enc_long(client.public_keys[client.encUser],store)[1])
+	new_log=difflog.diff_log(secret[-1],file_secret)
 	new_log.update_perm([],[my_new_perm])
 	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
 
-	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
-	checksum=create_checkSum(meta,'',secret[-1])
-	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
-	create_msg={"ENC_USER":client.encUser, "OP":"createFile", 
-		"PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
+	meta={'edit_number':'0','cpk':secret[-1],'checksum':''}
+	checksum=create_checksum(meta,'',secret[1])[1]
+	
+	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+
+		checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+
+		meta['edit_number']+'0x00000000')
+		
+	create_msg={"ENC_USER":client.encUser, "OP":"createFile", "PATH": enc_path,
+		"PARENT_SECRET":parent_secret,"SECRET":file_secret,"LOG_DATA":enc_log[1],"FILE_DATA":data[1]}
 	
 	if send_to_server(create_msg)==None:
 		return (0,'could not create file')
-	perm_msg={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":my_new_perm,
-		"SECRET":file_secret,"LOG_DATA":enc_log}
+	perm_msg={"ENC_USER":client.encUser, "OP":"addPermissions", "USERS_AND_PERMS":[my_new_perm],
+		"SECRET":file_secret,"LOG_DATA":enc_log[1], "PATH":enc_path}
 	if send_to_server(perm_msg)==None:
 		return (0,'my new permission')	
 	
-	return api_fopen(path)
+	client.keys[enc_path] = (new_read_key, new_write_key)
+	client.path_key[path] = enc_path
+	client.enc_path_key[enc_path] = path
+	
+	return api_fopen(path, "w")
 
 if __name__ == "__main__":
 	pass
