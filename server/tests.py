@@ -18,34 +18,72 @@ s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 def create_user_test():
 	s0.connect((SERVER_IP, SERVER_PORT))
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":"55555", "SECRET":"00000"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":"55555", "SECRET":"00000", "LOG_DATA":"Added asaj folder", "META_DATA":"Added asaj folder"})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPublicKey", "TARGET":"asaj"})["KEY"] == "55555"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"mkdir", "PATH":"/asaj/test", "PARENT_SECRET":"00000", "SECRET":"54321", "PARENT_LOG_DATA":"Added test dir", "LOG_DATA":"Created", "META_DATA":"Created test dir"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.meta_asaj"})["DATA"] == "Created test dir"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log.asaj"})["DATA"] == "Added test dir"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Created"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createFile", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "SECRET":"12345", "PARENT_LOG_DATA":"Added test.txt", "LOG_DATA":"Created", "DATA":"Checksum"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.meta_asaj"})["DATA"] == "Added asaj folder"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log_asaj"})["DATA"] == "Added asaj folder"
+
+	# Update meta for /asaj in preperation for making /asaj/test
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/.meta_asaj", "SECRET":"00000", "FILE_DATA":"Adding test folder", "LOG_DATA":"Added test dir"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log_.meta_asaj"})["DATA"] == "Added test dir"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.meta_asaj"})["DATA"] == "Adding test folder"
+
+	# Make /asaj/test
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"mkdir", "PATH":"/asaj/test", "PARENT_SECRET":"00000", "SECRET":"54321", "LOG_DATA":"Created", "META_DATA":"Created test dir"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log_test"})["DATA"] == "Created"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.meta_test"})["DATA"] == "Created test dir"
+
+  # Update meta for /asaj/test in preperation for making /asaj/test/test.txt
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/asaj/.meta_test", "SECRET":"54321", "FILE_DATA":"added test.txt", "LOG_DATA":"Added test.txt"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.meta_test"})["DATA"] == "added test.txt"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log_.meta_test"})["DATA"] == "Added test.txt"
+
+	# Make /asaj/test/test.txt and write to it
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createFile", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "SECRET":"12345", "LOG_DATA":"Created", "FILE_DATA":"Checksum"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "FILE_DATA":"This is a test", "LOG_DATA":"Added this is a test"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/test.txt"})["DATA"] == "This is a test"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log_test.txt"})["DATA"] == "Added this is a test"
+
+	# Give myself permissions for /asaj/test/test.txt and remove one of them
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"addPermissions", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "LOG_DATA":"Shared with asaj", "USERS_AND_PERMS":[("asaj", "11111"), ("asaj", "22222")]})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log_test.txt"})["DATA"] == "Shared with asaj"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0] == ["asaj", "asaj", "11111"]
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][1] == ["asaj", "asaj", "22222"]
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"deletePermissions", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "LOG_DATA":"Unshared with asaj", "USERS_AND_PERMS":[("asaj", "11111")]})["STATUS"] == 0
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPermissions", "TARGET":"asaj"})["PERMISSIONS"][0] == ["asaj", "asaj", "22222"]
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log.test.txt"})["DATA"] == "Unshared with asaj"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Added test.txt"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/asaj/test/test.txt", "SECRET":"12345", "FILE_DATA":"This is a test", "LOG_DATA":"Added this is a test"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/test.txt"})["DATA"] == "This is a test"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log.test.txt"})["DATA"] == "Added this is a test"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"mkdir", "PATH":"/asaj/test/secondtest", "PARENT_SECRET":"54321", "SECRET":"11111", "PARENT_LOG_DATA":"Added secondtest", "LOG_DATA":"Created", "META_DATA":"Created secondtest dir"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Added secondtest"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/test/.log_test.txt"})["DATA"] == "Unshared with asaj"
+
+	
+	# Try to do some stuff with nonexistant paths
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"mkdir", "PATH":"/asaj/noexist/secondtest"})["STATUS"] == 1
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createFile", "PATH":"/asaj/noexist/secondtest.txt"})["STATUS"] == 1
+
+	# Make sure ls doesn't give us meta or log files
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"ls", "PATH":"/asaj/test"})["FILES"] == ["test.txt"]
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"ls", "PATH":"/asaj/test"})["FOLDERS"] == ["secondtest"]
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"54321", "PARENT_LOG_DATA":"Deleted test.txt"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Deleted test.txt"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test/secondtest", "PARENT_SECRET":"54321", "PARENT_LOG_DATA":"Deleted secondtest"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log.test"})["DATA"] == "Deleted secondtest"
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test", "PARENT_SECRET":"00000", "PARENT_LOG_DATA":"Deleted test"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log.asaj"})["DATA"] == "Deleted test"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"ls", "PATH":"/asaj/test"})["FOLDERS"] == []
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"ls", "PATH":"/asaj"})["FILES"] == []
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"ls", "PATH":"/asaj"})["FOLDERS"] == ["test"]
+
+	# Update meta for /asaj/test in preperation for deleting /asaj/test/test.txt
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/asaj/.meta_test", "SECRET":"54321", "FILE_DATA":"", "LOG_DATA":"deleted test.txt"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.meta_test"})["DATA"] == ""
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/asaj/.log_.meta_test"})["DATA"] == "deleted test.txt"
+
+	# Change the secret for /asaj/test
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"changeFileSecret", "PATH":"/asaj/test", "SECRET":"54321", "NEW_SECRET":"88888"})["STATUS"] == 0
+
+	# Delete /asaj/test/test.txt
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test/test.txt", "PARENT_SECRET":"88888"})["STATUS"] == 0
+
+	# Update meta for /asaj in preperation for deleting /asaj/test
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/.meta_asaj", "SECRET":"00000", "FILE_DATA":"", "LOG_DATA":"deleted test"})["STATUS"] == 0
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.meta_asaj"})["DATA"] == ""
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log_.meta_asaj"})["DATA"] == "deleted test"
+
+	# Delete /asaj/test/test.txt
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"delete", "PATH":"/asaj/test", "PARENT_SECRET":"00000"})["STATUS"] == 0
+
+	# Logout
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"logoutUser"})["STATUS"] == 0
 	s0.close()
 	"""

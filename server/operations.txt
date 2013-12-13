@@ -5,6 +5,8 @@ createUser
 		PASSWORD
 		SECRET
 		KEY
+		META_DATA - for the meta file of the home directory
+		LOG_DATA - for the meta file
 	response
 
 loginUser
@@ -59,7 +61,7 @@ createFile: #creates a new file on the server
 		PATH
 		PARENT_SECRET
 		SECRET
-		DATA
+		FILE_DATA
 		LOG_DATA
 	response
 
@@ -75,7 +77,6 @@ delete:  #deletes a file or directory if the directory is empty
 	request
 		PATH
 		PARENT_SECRET
-		PARENT_LOG_DATA
 	response
 
 changeFileSecret:  #changes the secret written in the logFil: This is used to verify that a client has permission to write to a file, logfile, or change permissions
