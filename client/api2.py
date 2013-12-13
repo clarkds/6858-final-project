@@ -808,18 +808,15 @@ def api_mv(old_path, new_path):
 	if not client.loggedIn:
 		raise Exception("not logged in")
 		
-	if client.loggedIn==False:
-		return (0,'client not logged in')
-		
-	handle1=api_open(old_parent,'a+')
-	handle2=api_open(new_path,'a+')
-	contents=api_fread(handle1)
-	client.open_files[handle2][METADATA]=client.open_files[handle1][METADATA]
-	client.open_files[handle2][LOG_PATH_ON_DISK]=client.open_files[handle1][LOG_PATH_ON_DISK]
-	client.open_files[handle2][CONTENTS_PATH_ON_DISK]=client.open_files[handle1][CONTENTS_PATH_ON_DISK]
-	if api_fflush(handle2)!=1:
+	handle1 = api_fopen(old_path,'w')
+	handle2 = api_fopen(new_path,'w')
+	contents = api_fread(handle1)
+	client.open_files[handle2][METADATA] = client.open_files[handle1][METADATA]
+	client.open_files[handle2][LOG_PATH_ON_DISK] = client.open_files[handle1][LOG_PATH_ON_DISK]
+	client.open_files[handle2][CONTENTS_PATH_ON_DISK] = client.open_files[handle1][CONTENTS_PATH_ON_DISK]
+	if api_fflush(handle2) != 1:
 		return (0,'flush failed')
-	if api_rm(handle1)!=1:
+	if api_rm(handle1) != 1:
 		return (0,'rm failed')
 	
 def api_opendir(path):
@@ -847,7 +844,6 @@ def api_rm(path):
 	if check == True:
 		return (0,'file cannot be removed because it is open')
 	print client.loggedIn
-	print '----------------------------------------------'
 	api_fread(meta)
 	api_fwrite(meta,'\nrm '+filename+'\n')
 	api_fflush(meta)
@@ -863,7 +859,14 @@ def api_rm(path):
 		return False
 	return True
 	
+def api_path_exists(path):
+	if not client.loggedIn:
+		raise Exception("not logged in")
 	
+	enc_path = encrypt_path(path)
+	list_directory = {"ENC_USER":client.encUser, "OP":"ls", "PATH":enc_path}
+	response = send_to_server(list_directory)
+	return response != None
 
 def api_list_dir(path):
 	
@@ -939,8 +942,6 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 	newdiff.write(new_log_file)
 	newdiff.close()
 	return (True,old_filepassw)
-
-
 
 def update_checksum(handle,csk):
 	if True:
