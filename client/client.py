@@ -69,12 +69,13 @@ class FileClient(cmd.Cmd):
 		ret = ""
 		for  (name, ftype) in dir_contents:
 			ret = ret + name + '\t'
-		print ret
+		if ret != "":
+			print ret
 			
 	def do_cd(self, arg):
 		args = parse(arg)
 		if len(args) == 0:
-			self.current_dir = "/" + username
+			self.current_dir = "/" + self.username
 		elif len(args) == 1:
 			path = get_absolute_path(self.current_dir, args[0])
 			try:
@@ -111,6 +112,14 @@ class FileClient(cmd.Cmd):
 				api_rm(get_absolute_path(path, fname))
 			except:
 				print "No such file or directory"
+		elif len(args) == 2:
+			if args[0] == "-r":
+				(path, fname) = split_path(get_absolute_path(self.current_dir, args[1]))
+				try:
+					api_list_dir(path)
+					api_rm(get_metafile_path(get_absolute_path(path, fname)))
+				except:
+					print "No such file or directory"
 		else:
 			print "Error"
 	
@@ -144,36 +153,42 @@ class FileClient(cmd.Cmd):
 			print "Error"
 	
 	def do_vim(self, arg):
-		args = parse(arg)
-		if len(args) == 1:
-			(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
-			try:
-				api_list_dir(path)
-				EDITOR = os.environ.get('EDITOR','vim') #that easy!
-				handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
-				contents = api_fread(handle)
+		run_editor('vim')
 
-				tempfile = open('.temp.'+args[0],'w')
-				tempfile.write(contents)
-				tempfile.flush()
-				call([EDITOR, tempfile.name])
-				tempfile.flush()
-				tempfile.close()
-				temp_filename = '.temp.'+split_path(args[0])[1]
-				tempfile = open(temp_filename,'r')
-				new_contents = tempfile.read()
-				handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'w')
-				api_fwrite(handle, new_contents)
-				api_fflush(handle)
-				api_fclose(handle)
-				os.remove(temp_filename)
-			except:
- 				print "No such file or directory" 
+	def do_emacs(self, arg):
+		run_editor('emacs')
 
 	def do_logout(self, arg):
 		api_logout()
 		return True
-		
+
+def run_editor(which):
+	args = parse(arg)
+	if len(args) == 1:
+		(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
+		try:
+			api_list_dir(path)
+			EDITOR = os.environ.get('EDITOR', which) #that easy!
+			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
+			contents = api_fread(handle)
+
+			tempfile = open('.temp.'+args[0],'w')
+			tempfile.write(contents)
+			tempfile.flush()
+			call([EDITOR, tempfile.name])
+			tempfile.flush()
+			tempfile.close()
+			temp_filename = '.temp.'+split_path(args[0])[1]
+			tempfile = open(temp_filename,'r')
+			new_contents = tempfile.read()
+			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'w')
+			api_fwrite(handle, new_contents)
+			api_fflush(handle)
+			api_fclose(handle)
+			os.remove(temp_filename)
+		except:
+ 			print "No such file or directory" 
+
 def start_new_client():
 	test = LoginClient()
 	test.cmdloop()

@@ -173,8 +173,9 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['ERROR'] = path + " to delete does not exist"
 					response['STATUS'] = 1	
 				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
-					if os.path.isdir(path):
-						if len(os.listdir(path)) == 0:
+					#	Deleting a folder, not a file
+					if strip_meta(path) != path: 
+						if len(os.listdir(strip_meta(path))) == 0:
 							os.rmdir(path)
 							os.remove(get_metafile_path(path))
 							os.remove(get_logfile_path(get_metafile_path(path)))
@@ -217,7 +218,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 				path = ('users' + msg_obj['PATH'])
 				parent_dir = get_parent_directory(path)
 				meta_file = get_metafile_path(path)
-				log_file = get_logfile_path(path)
+				log_file = get_logfile_path(meta_file)
 				if os.path.exists(path):
 					response['ERROR'] = "Folder or file " + path + " already exists"
 					response['STATUS'] = 1

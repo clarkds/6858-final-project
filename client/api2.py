@@ -874,6 +874,7 @@ def api_rm(path):
 		if client.open_files[m][PATH] == path:
 			check = True
 			break
+	print "Entered rm"	
 	#if check == True:
 		#return (0,'file cannot be removed because it is open')
 
@@ -881,18 +882,24 @@ def api_rm(path):
 		
 	api_fread(meta)
 	api_fwrite(meta,'\nrm '+filename+'\n')
+	print "Entered rm"	
 	api_fflush(meta)
 	log_file = open(client.open_files[meta][LOG_PATH_ON_DISK],'r')
 	log_data = log_file.read()
+	print "Entered rm"	
 	diff_obj = parse_log(log_data)
 	filepassw = diff_obj.password
+	print "Entered rm"	
 	api_fclose(meta)
 		
+	print "Entered rm"	
 	#if api_set_permissions(handle, [], [], True)[0] == 0:
 		#return (0,'could not set permissions')
 	
 	api_fflush(handle)
+	print "Entered rm"	
 	api_fclose(handle)
+	print "Entered rm"	
 
 	message = {"ENC_USER":client.encUser, "OP":"delete", "PARENT_SECRET":filepassw, "PATH":encrypt_path(path)}
 	print "A!!!!!!!!!!!!!!!!!!"
@@ -915,6 +922,11 @@ def api_list_dir(path):
 		raise Exception("not logged in")
 	
 	enc_path = encrypt_path(path)
+
+  # Path not found in the dictionary
+	if enc_path == False:
+		raise Exception
+
 	list_directory = {"ENC_USER":client.encUser, "OP":"ls", "PATH":enc_path}
 	response = send_to_server(list_directory)
 	if response==None:
@@ -928,7 +940,7 @@ def api_list_dir(path):
 			file_name = crypt.sym_dec(file_key, object)
 			directory_contents.append((file_name, "FILE"))
 		except:
-			pass
+			return None
 			
 	for object in response["FOLDERS"]:
 		obj_enc_path = enc_path + "/" + object
@@ -937,7 +949,7 @@ def api_list_dir(path):
 			dir_name = crypt.sym_dec(dir_key, object)
 			directory_contents.append((dir_name, "FOLDER"))
 		except:
-			pass
+			return None
 			
 	return directory_contents
 
