@@ -174,8 +174,8 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 					response['STATUS'] = 1	
 				elif check_write_key(parent_dir, msg_obj['PARENT_SECRET']):
 					#	Deleting a folder, not a file
-					if strip_meta(path) != path: 
-						if len(os.listdir(strip_meta(path))) == 0:
+					if os.path.isdir(path): 
+						if len(os.listdir(path)) == 0:
 							os.rmdir(path)
 							os.remove(get_metafile_path(path))
 							os.remove(get_logfile_path(get_metafile_path(path)))

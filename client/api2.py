@@ -584,7 +584,6 @@ def api_fopen(path, mode):
 			enc_path = get_metafile_path(enc_path)		
 		
 		if enc_path is None or strip_meta(enc_path) not in client.keys:
-			print "NUTES!"
 			if mode == "r":
 				print "file does not exist, can't fopen with read mode"
 				return False
@@ -816,15 +815,17 @@ def api_mkdir(path):
 	#create file_secret
 	filepassw = randomword(40)
 	(lenPub, pubKey, lenPriv, privKey) = crypt.create_asym_key_pair()
+
 	#create read and write key
 	new_read_key = crypt.create_sym_key(crypt.hash(client.passw), dir_name, dir_path)[1]
 	new_write_key = crypt.create_sym_key(crypt.hash(client.passw), dir_name, dir_path)[1]
 	enc_filename = crypt.sym_enc(new_read_key, dir_name)[1]
 	enc_path = encrypt_path(dir_path) + "/" + enc_filename
+
 	# adds file to directories keys path_key and path
 	client.keys[enc_path] = (new_read_key,new_write_key)
 	client.path_key[path] = enc_path
-	client.path[enc_path] = path
+	client.enc_path_key[enc_path] = path
 	
 	#creates a new permission for the user
 	store = json.dumps((enc_path, new_read_key, new_write_key))
@@ -897,14 +898,10 @@ def api_opendir(path):
 	
 	meta=get_metafile_path(path)
 	return api_fopen(meta, 'w')
-	# TODO: api_fopen should take a prefix that it adds in front of encrypted thingy
 
 # removes a file or directory from the server
 def api_rm(path):
-	#if not client.loggedIn:
-	#	raise Exception("not logged in")
 
-	print "Entered rm"	
 	path = resolve_path(path)
 		
 	(parent_path, filename) = split_path(path)
@@ -914,35 +911,21 @@ def api_rm(path):
 		if client.open_files[m][PATH] == path:
 			check = True
 			break
-	print "Entered rm"	
-	#if check == True:
-		#return (0,'file cannot be removed because it is open')
 
 	handle = api_fopen(path, "w")
 		
 	api_fread(meta)
 	api_fwrite(meta,'\nrm '+filename+'\n')
-	print "Entered rm"	
 	api_fflush(meta)
 	log_file = open(client.open_files[meta][LOG_PATH_ON_DISK],'r')
 	log_data = log_file.read()
-	print "Entered rm"	
 	diff_obj = parse_log(log_data)
 	filepassw = diff_obj.password
-	print "Entered rm"	
 	api_fclose(meta)
-		
-	print "Entered rm"	
-	#if api_set_permissions(handle, [], [], True)[0] == 0:
-		#return (0,'could not set permissions')
-	
 	api_fflush(handle)
-	print "Entered rm"	
 	api_fclose(handle)
-	print "Entered rm"	
 
 	message = {"ENC_USER":client.encUser, "OP":"delete", "PARENT_SECRET":filepassw, "PATH":encrypt_path(path)}
-	print "A!!!!!!!!!!!!!!!!!!"
 	if send_to_server(message) == None:
 		return False
 	return True

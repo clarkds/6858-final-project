@@ -43,15 +43,16 @@ class FileClient(cmd.Cmd):
 		self.username = username
 		self.prompt = "file-server:" + self.current_dir + " " + self.username + "$ "
 		self.help_message = {"logout":"",\
-												"ls":"[path]",\
+												"ls":"",\
 												"cd":"[path]",\
-												"touch":"[file]",\
-												"rm":"[file]",\
-												"mv":"[path][path]",\
-												"mkdir":"[path]",\
-												"vim":"[file]",\
-												"emacs":"[file]",\
-												"share":"[user][file]",\
+												"touch":"[path]",\
+												"rm":"[path]",\
+												"mv":"[path] [path]",\
+												"mkdir":"[-r][path]",\
+												"vim":"[path]",\
+												"emacs":"[path]",\
+												"verify":"[path]",\
+												"rebuild":"[path]",\
 												"logout":""}
 
 	def do_help(self, arg):
@@ -64,7 +65,7 @@ class FileClient(cmd.Cmd):
 		if len(args) == 0:
 			dir_contents = api_list_dir(self.current_dir)
 		else:
-			print "Error"
+			print "Error: ls takes no arguments"
 			return
 		ret = ""
 		for  (name, ftype) in dir_contents:
@@ -86,7 +87,7 @@ class FileClient(cmd.Cmd):
 				print "No such file or directory"
 				return
 		else:
-			print "Error"
+			print "Error: cd takes argument(s) " + self.help_message["cd"]
 
 	def do_touch(self, arg):
 		args = parse(arg)
@@ -101,7 +102,7 @@ class FileClient(cmd.Cmd):
 			except:
 				print "No such file or directory"
 		else:
-			print "Error"
+			print "Error: touch takes argument(s) " + self.help_message["touch"]
 	
 	def do_rm(self, arg):
 		args = parse(arg)
@@ -121,7 +122,7 @@ class FileClient(cmd.Cmd):
 				except:
 					print "No such file or directory"
 		else:
-			print "Error"
+			print "Error: rm takes argument(s) " + self.help_message["rm"]
 	
 	def do_mv(self, arg):
 		args = parse(arg)
@@ -129,16 +130,13 @@ class FileClient(cmd.Cmd):
 			(path1, fname1) = split_path(get_absolute_path(self.current_dir, args[0]))
 			(path2, fname2) = split_path(get_absolute_path(self.current_dir, args[1]))
 			try:
-				print path1
 				api_list_dir(path1)
-				print path2
 				api_list_dir(path2)
-				print "done!"
 				api_mv(get_absolute_path(path1, fname1), get_absolute_path(path2, fname2))
 			except:
 				print "No such file or directory"
 		else:
-			print "Error"
+			print "Error: mv takes argument(s) " + self.help_message["mv"]
 
 	def do_mkdir(self, arg):
 		args = parse(arg)
@@ -150,13 +148,13 @@ class FileClient(cmd.Cmd):
 			except:
 				print "No such file or directory"
 		else:
-			print "Error"
+			print "Error: mkdir takes argument(s) " + self.help_message["mkdir"]
 	
 	def do_vim(self, arg):
-		run_editor('vim')
+		run_editor('vim', arg)
 
 	def do_emacs(self, arg):
-		run_editor('emacs')
+		run_editor('emacs', arg)
 
 	def do_logout(self, arg):
 		api_logout()
@@ -175,7 +173,7 @@ class FileClient(cmd.Cmd):
 				print type(inst)
 				print inst
 		else:
-			print "Error: too many args"
+			print "Error: verify takes argument(s) " + self.help_message["verify"]
 			
 	def do_rebuild(self,arg):
 		args = parse(arg)
@@ -190,9 +188,9 @@ class FileClient(cmd.Cmd):
 				print type(inst)
 				print inst
 		else:
-			print "Error: too many args"
+			print "Error: rebuild takes argument(s) " + self.help_message["rebuild"]
 		
-def run_editor(which):
+def run_editor(which, arg):
 	args = parse(arg)
 	if len(args) == 1:
 		(path, fname) = split_path(get_absolute_path(self.current_dir, args[0]))
@@ -217,6 +215,10 @@ def run_editor(which):
 			api_fclose(handle)
 			os.remove(temp_filename)
 		except:
+			print "No such file or directory"
+	else:
+		print "Error: " + which + " takes argment(s) " + self.help_message[which]
+
 def start_new_client():
 	test = LoginClient()
 	test.cmdloop()
