@@ -811,13 +811,20 @@ def api_mv(old_path, new_path):
 	handle1 = api_fopen(old_path,'w')
 	handle2 = api_fopen(new_path,'w')
 	contents = api_fread(handle1)
-	client.open_files[handle2][METADATA] = client.open_files[handle1][METADATA]
-	client.open_files[handle2][LOG_PATH_ON_DISK] = client.open_files[handle1][LOG_PATH_ON_DISK]
-	client.open_files[handle2][CONTENTS_PATH_ON_DISK] = client.open_files[handle1][CONTENTS_PATH_ON_DISK]
+	
+	#TODO: set permissions here...
+	
+	api_fseek(handle2, 0, 0)
+	api_fwrite(handle2, contents)
+	
 	if api_fflush(handle2) != 1:
 		return (0,'flush failed')
-	if api_rm(handle1) != 1:
+	api_fflush(handle1)
+	api_fclose(handle1)
+	if api_rm(old_path) != 1:
 		return (0,'rm failed')
+	
+	return True
 	
 def api_opendir(path):
 	if not client.loggedIn:

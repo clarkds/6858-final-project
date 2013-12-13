@@ -58,3 +58,9 @@ api2.api_fclose(handle)
 print api2.api_rm('/leo1/t4')
 
 print api2.api_list_dir('/leo1')
+
+api2.api_mv('/leo1/t2', '/leo1/twinkies/t2')
+list1 = api2.api_list_dir('/leo1')
+list2 = api2.api_list_dir('/leo1/twinkies')
+print "list1", list1
+print "list2", list2
