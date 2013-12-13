@@ -114,6 +114,23 @@ class FileClient(cmd.Cmd):
 	
 	def do_vim(self, arg):
 		args = parse(arg)
+		import sys, os
+		from subprocess import call
+
+		EDITOR = os.environ.get('EDITOR','vim') #that easy!
+
+		initial_message = "contents" # if you want to set up the file somehow
+
+		tempfile=open('temp','w')
+		tempfile.write(initial_message)
+		tempfile.flush()
+		call([EDITOR, tempfile.name])
+  
+
+
+m=temp
+print "yes"
+print m
 		pass
 	
 	def do_emacs(self, arg):
