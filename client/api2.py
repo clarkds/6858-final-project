@@ -207,17 +207,13 @@ def update_keys():
 	for perm_tuple in resp["PERMISSIONS"]:
 		(enc_pathname, read_key, write_key) = json.loads(crypt.asym_dec_long(client.secrets["user_sk"], perm_tuple[2]))
 		client.keys[enc_pathname] = (read_key, write_key)
-		
+	
 	enc_path_list = client.keys.keys()
 	
-	#for key, val in client.keys.iteritems():
-	#	print "***", key, val
-	
 	enc_path_list = [i.split('/')[1:] for i in enc_path_list]
-	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))
+	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))	
 	
 	for enc_path in enc_path_list:
-		print enc_path
 		path = []
 		full_enc_path = '/' + string.join(enc_path, '/')
 		if len(enc_path) == 1:
@@ -227,10 +223,11 @@ def update_keys():
 			name = crypt.sym_dec(client.keys[full_enc_path][0],enc_path[1])
 			path.append(name)
 		else:
-			path.append(client.path_key["/" + string.join(enc_path[:-1],'/')])
-			name = crypt.sym_Dec(client.keys[full_enc_path][0], enc_path[-1])
+			path.append(client.enc_path_key["/" + string.join(enc_path[:-1],'/')])
+			name = crypt.sym_dec(client.keys[full_enc_path][0], enc_path[-1])
 			path.append(name)
 		full_path = '/' + string.join(path, '/')
+		full_path = sanitize_path(full_path)
 		
 		client.path_key[full_path] = full_enc_path
 		client.enc_path_key[full_enc_path] = full_path
@@ -561,11 +558,6 @@ def api_fopen(path, mode):
 		return False
 	(metadata_map, contents) = parsed
 	
-	#print "***************************************************"
-	#print metadata_map
-	#print contents
-	#print "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
-	
 	if not verify_checksum(metadata_map, contents, True):
 		print "verify checksum failed"
 		return False
@@ -670,6 +662,7 @@ def api_fflush_helper(handle, attempt_num):
 	api_fseek(handle,0,0)
 	log=open(client.open_files[handle][LOG_PATH_ON_DISK],'r')
 	log_data=log.read()
+
 	diff_obj=parse_log(log_data)
 	csk=diff_obj.csk
 	filepassw=diff_obj.password
@@ -738,53 +731,60 @@ def api_chdir(path):
 	
 	client.working_dir = new_client_path
 
-def api_mkdir(parent, new_dir_name):
+def api_mkdir(path):
 	if not client.loggedIn:
 		raise Exception("not logged in")	
 
-	directory=get_parent_directory(path)
-	path_filename=split_path(path)[1]
-	enc_dir=encrypt_path(dir_path)
-	dir_handle=api_opendir(dir_path)
-	log_file=open(client.open_files[dir_handle][LOG_PATH_ON_DISK],'r')
-	data=log_file.read()
-	diff_obj=parse_log(data)
-	parent_secret=diff_obj.password
+	path = resolve_path(path)
+	(dir_path, dir_name) = split_path(path)
+	
+	#????enc_dir = encrypt_path(dir_path)
+	
+	dir_handle = api_opendir(dir_path)
+	log_file = open(client.open_files[dir_handle][LOG_PATH_ON_DISK],'r')
+	data = log_file.read()
+	diff_obj = parse_log(data)
+	parent_secret = diff_obj.password
 	api_fread(dir_handle)
-	api_fwrite(dir_handle,'\n add'+path_filename+'\n')
-	api_fflush(dir_handle)
+	api_fwrite(dir_handle,'\n add'+dir_name+'\n')
+	api_fclose(dir_handle)
 	
 	#Create filepassw
-	filepassw=randomword(40)
+	filepassw = randomword(40)
 	#create csk and cpk
 	(lenPub, pubKey, lenPriv, privKey) = crypt.create_asym_key_pair()
 	#create read and write key
-	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
-	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
-	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
+	new_read_key = crypt.create_sym_key(crypt.hash(client.passw), dir_name, dir_path)[1]
+	new_write_key = crypt.create_sym_key(crypt.hash(client.passw), dir_name, dir_path)[1]
+	enc_filename = crypt.sym_enc(new_read_key, dir_name)[1]
 	
-	enc_path = encrypt_path(directory) + "/" + enc_filename
-	client.keys[enc_path]=(new_read_key,new_write_key)
-	store = pickle.dumps((enc_path, new_read_key, new_write_key))
-	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
-	new_log=difflog.diff_log(privKey,filepassw)
+	enc_path = encrypt_path(dir_path) + "/" + enc_filename
+	client.keys[enc_path] = (new_read_key,new_write_key)
+	client.path_key[path] = enc_path
+	client.path_key[enc_path] = path
+	
+	store = json.dumps((enc_path, new_read_key, new_write_key))
+	my_new_perm  = (client.encUser, crypt.asym_enc_long(client.public_keys[client.encUser],store)[1])
+	new_log = difflog.diff_log(privKey,filepassw)
 	new_log.update_perm([],[my_new_perm])
-	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+	enc_log = crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
 
-	meta={'edit_number':'0','cpk':pubKey,'checksum':''}
-	checksum=create_checksum(meta,'',privKey)
-	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
-	create_msg={
+	meta = {'edit_number':'0','cpk':pubKey,'checksum':''}
+	checksum = create_checksum(meta,'',privKey)[1]
+	meta["checksum"] = checksum
+	data = crypt.sym_enc(new_read_key, crypt.watermark() + hex_string(checksum) + checksum + hex_string(meta['cpk'])
+		 + meta['cpk'] + hex_string(meta['edit_number']) + meta['edit_number'] + '0x00000000')
+	create_msg = {
 		"ENC_USER":client.encUser,
-		"OP":"mkDir",
-		"PARENT_SECRET":file_secret,
+		"OP":"mkdir",
+		"PARENT_SECRET":parent_secret,
 		"SECRET":filepassw,
-		"LOG_DATA":enc_log,
-		"FILE_DATA":data,
-		"PATH": get_metafile_path(enc_path)}
+		"LOG_DATA":enc_log[1],
+		"META_DATA":data[1],
+		"PATH": enc_path}
 	if send_to_server(create_msg)==None:
 		return (0,'could not create file')
-	send_perm={}
+	send_perm = {}
 	
 	new_message = {
 		"ENC_USER":client.encUser,
@@ -792,13 +792,13 @@ def api_mkdir(parent, new_dir_name):
 		"USERS_AND_PERMS":[my_new_perm],
 		"PATH": get_metafile_path(enc_path),
 		"SECRET": filepassw,
-		"LOG_DATA": enc_log
+		"LOG_DATA": enc_log[1]
 	}
 	
 	if send_to_server(new_message)==None:
 		return (0,'my new permission')	
 	
-	return api_fopen(path)
+	return api_fopen(get_metafile_path(path), "w")
 
 # can only move a single file at the time ->
 def api_mv(old_path, new_path):
@@ -1108,10 +1108,6 @@ def api_create_file(path):
 
 	meta={'edit_number':'0','cpk':pubKey,'checksum':''}
 	checksum=create_checksum(meta,'',privKey, True)[1]
-	
-	#print "CREATE_FILE CPK", secret[1]
-	#print "CREATE_FILE CSK", secret[-1]
-	#print "CREATE_FILE CHECKSUM", checksum
 	
 	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+
 		checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+
