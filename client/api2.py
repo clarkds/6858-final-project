@@ -866,26 +866,30 @@ def api_list_dir(path):
 	if not client.loggedIn:
 		raise Exception("not logged in")
 	
-	enc_path = encrypted_path(path)
+	enc_path = encrypt_path(path)
 	list_directory = {"ENC_USER":client.encUser, "OP":"ls", "PATH":enc_path}
 	response = send_to_server(list_directory)
 	if response==None:
 		return (0,'listing directory')
 		
 	directory_contents = []
-	for object in directory_contents["FILES"]:
-		obj_enc_path = enc_path + object
-		if obj_enc_path in client.keys:
+	for object in response["FILES"]:
+		obj_enc_path = enc_path + "/" + object
+		try:
 			file_key = client.keys[obj_enc_path][0]
 			file_name = crypt.sym_dec(file_key, object)
 			directory_contents.append((file_name, "FILE"))
+		except:
+			pass
 			
-	for object in directory_contents["FOLDERS"]:
-		obj_enc_path = enc_path + object
-		if obj_enc_path in client.keys:
+	for object in response["FOLDERS"]:
+		obj_enc_path = enc_path + "/" + object
+		try:
 			dir_key = client.keys[obj_enc_path][0]
 			dir_name = crypt.sym_dec(dir_key, object)
 			directory_contents.append((dir_name, "FOLDER"))
+		except:
+			pass
 			
 	return directory_contents
 

@@ -38,3 +38,21 @@ api2.api_fclose(handle2)
 
 print "text1: ", text1
 print "text2: ", text2
+
+handle = api2.api_create_file('/leo1/t2')
+api2.api_fwrite(handle, "kobe. celtics suck")
+api2.api_fflush(handle)
+api2.api_fclose(handle)
+
+handle = api2.api_create_file('/leo1/t3')
+api2.api_fwrite(handle, "lakers > celtics")
+api2.api_fflush(handle)
+api2.api_fclose(handle)
+
+handle = api2.api_create_file('/leo1/t4')
+api2.api_fwrite(handle, "we have steve nash :(")
+api2.api_fflush(handle)
+api2.api_fclose(handle)
+
+
+print api2.api_list_dir('/leo1')
