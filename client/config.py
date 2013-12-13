@@ -4,7 +4,6 @@ these are config constants for the client, used in api2
 
 TESTING_ON = True
 TESTING_ALLOW_RECREATE_USER = True
-WATERMARK = 'this is a watermark'
 SOCKET_TIMEOUT = 5
 SECRET_LEN = 24
 

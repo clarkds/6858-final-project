@@ -31,3 +31,24 @@ socket = None
 
 open_files = {}		#key = handle of contents file, val = (path, enc_path, metadata_map, contents_path_on_disk, log_path_on_disk, path_to_old_file,mode)
 	# metadata_map is for accessing each part of metadata
+
+import string
+
+class DirKey(dict):
+	def __init__(self, *args):
+		dict.__init__(self,args)
+
+	def __getitem__(self,key):
+		key_list = key.split('/')
+		if key_list[-1].startswith('.meta_'):
+			key_list[-1] = key_list[-1][len('.meta_'):]
+		key = string.join(key_list, '/')
+		val = dict.__getitem__(self,key)
+		return val
+
+	def __setitem__(self,key,val):
+		key_list = key.split('/')
+		if key_list[-1].startswith('.meta_'):
+			key_list[-1] = key_list[-1][len('.meta_'):]
+		key = string.join(key_list, '/')
+		return dict.__setitem__(self,key,val)

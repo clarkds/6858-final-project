@@ -63,6 +63,7 @@ watermark
 4-byte len, CSK
 4-byte len, edit_list
 """
+
 #~~~~~~~~~~~~~~~~~~~~~~Global variables ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #All global variables and config constants have been moved to client_clobals.py and config.py
@@ -76,9 +77,9 @@ def reset_client_vars():
 	client.working_dir = None
 	client.secrets = {}
 	client.loggedIn = True	#TODO: change loggedin to false
-	client.keys = {}
-	client.path_key = {}
-	client.enc_path_key = {}
+	client.keys = client.DirKey()
+	client.path_key = client.DirKey()
+	client.enc_path_key = client.DirKey()
 		
 	if client.socket is not None:
 		try:
@@ -288,9 +289,9 @@ def test_write_secrets():
 		return False
 
 def update_keys():
-	client.keys = {}
-	client.path_key = {}
-	client.enc_path_key = {}
+	client.keys = client.DirKey()
+	client.path_key = client.DirKey()
+	client.enc_path_key = client.DirKey()
 	resp = send_to_server({"OP": "getPermissions", "ENC_USER": client.encUser, "TARGET": client.encUser})
 	if resp is None:
 		return False
@@ -374,21 +375,28 @@ def parse_metadata_and_contents_for_file(data):
 	#returns tuple of (metadata_map,contents) or None
 	try:
 		bp=0
-		watermark=data[0:len(WATERMARK)]
-		if watermark!=WATERMARK:
+		print "watermark ind", 0, len(crypt.watermark())
+		watermark=data[0:len(crypt.watermark())]
+		if watermark!=crypt.watermark():
 			return None
 		bp+=len(watermark)
+		print "checkSum_Hex", data[bp:bp+10], bp, bp+10
 		checkSum_Hex=data[bp:bp+10]
 		checkSum_len=int(checkSum_Hex,16)
 		bp+=10
+		print "checkSum", data[bp:bp+checkSum_len], bp, bp+checkSum_len
 		checkSum=data[bp:bp+checkSum_len]
 		bp+=checkSum_len
+		print "CPK_Hex", data[bp:bp+10], bp, bp+10
 		CPK_Hex=data[bp:bp+10]
 		CPK_len=int(CPK_Hex,16)
 		bp+=10
+		print "CPK", data[bp:bp+CPK_len], bp, bp+CPK_len
 		CPK=data[bp:bp+CPK_len]
 		bp+=CPK_len
+		print "edit_number_Hex", data[bp:bp+10], bp, bp+10
 		edit_number_Hex=data[bp:bp+10]
+		print "edit_number###", edit_number_Hex
 		edit_number_len=int(edit_number_Hex,16)
 		bp+=10
 		edit_number=data[bp:bp+edit_number_len]
@@ -400,19 +408,44 @@ def parse_metadata_and_contents_for_file(data):
 		metadata={'checksum':checkSum,'cpk':CPK,'edit_number':edit_number}
 		return (metadata,contents)
 	except:
+		print "ASKFDDSAKF"
+		traceback.print_exc()
 		return None
 		
 def test_parse_metadata_and_contents_for_file():
-	WATERMARK='HI there'
-	data='HI there0x00000002210x0000000120x0000000130x000000014'
+	#data=crypt.watermark() + '0x00000002210x0000000120x0000000130x000000014'
+	
+	data = "DEADBEEF0x000002156545faa0a5bda350044b3a54fee12\
+89134bc23ec3397a96391dac794b8020fa4e3cbf02af48666a1692a69ef9f188bf608a2d80db6da6\
+1fa6975c9c2ee3ed311b140c58490c4301bc49a7349ed0fa6883b26a00065450e8dcda70090d4dc2\
+1ca05781da58c4f7480d81cebb6bf450a380402500a45dd1defbc66d46bd03626d234ad8737b56de\
+af5ab9a889da97ce5354e2e7778318c81fe5bb0ce1e2203e4980837bf52fa6f72a95eb7ddc337626\
+4fe773199e7a2d102808ee978a077f258092d25cbbccde501b53f6ba326265f3263c4a1215c7f9c1\
+99fc3ce9212f6486df9dba37fc81a225d7838d4330367a055de82e2c0ef6effb9da8596292cc6478\
+1d30x000003992d2d2d2d2d424547494e205055424c4943204b45592d2d2d2d2d0a4d494942496a4\
+14e42676b71686b6947397730424151454641414f43415138414d49494243674b4341514541306c6\
+1535061456d65595655353074632b4773300a67435279526e66347341315a6951786b6b686442776\
+4724368373655577a4f374b696761687870484144633158465a5a53546c586c6e3035773837306d6\
+84b530a656f7249754369334b6f71654f434f64712b3866475865306c54794e333637514b5554734\
+4776d414279515342334f2f6f74796e762f776943326d6d2f73754a0a45775a4b766a6b49436e497\
+943696b4e754c583441584e332b6e2b764c31386b4972545561324a69457470716f536b33746a336\
+b4852626b33444a35664b2b450a6d6c735a6d4d4262426c2b3159416974366e6e4c4e596a3663614\
+15359566832376b6f4f6f46496e3841684c6162544465364f412b436b5a354f5a33487048700a394\
+86f4c364f38535347314b4379477562515842774d7254534a623931386c6b736677766a576830357\
+34c4359786a4d316d53494b697567545868465450765a0a46514944415141420a2d2d2d2d2d454e4\
+4205055424c4943204b45592d2d2d2d2d0x0000001600x00000000"
+	
+	print parse_metadata_and_contents_for_file(data)
 	if parse_metadata_and_contents_for_file(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
 		return True
 	else:
 		return False
 
+#test_parse_metadata_and_contents_for_file()
+
 def hex_string(data):
 	#takes as input a string and returns the length in a hex of 4 bytes
-	data_len= sys.getsizeof(data)
+	data_len= len(data)
 	m=str(hex(data_len))
 	if len(m)<10:
 		newm=m.split('x')
@@ -432,8 +465,8 @@ def parse_log(data):
 	#returns datalog object
 	if True:
 		bp=0
-		watermark=data[0:len(WATERMARK)]
-		if watermark!=WATERMARK:
+		watermark=data[0:len(crypt.watermark())]
+		if watermark!=crypt.watermark():
 			print 'theres not watermark!@!!'
 			return False
 		bp+=len(watermark)
@@ -463,8 +496,8 @@ def parse_metadata_for_dir(data):
 	#returns (metadata_map,contents) or None
 	try:
 		bp=0
-		watermark=data[0:len(WATERMARK)]
-		if watermark!=WATERMARK:
+		watermark=data[0:len(crypt.watermark())]
+		if watermark!=crypt.watermark():
 			return None
 		bp+=len(watermark)
 		checkSum_Hex=data[bp:bp+10]
@@ -492,7 +525,8 @@ def parse_metadata_for_dir(data):
 		return None
 	
 def test_parse_metadata_for_dir():
-	WATERMARK='HI there'
+	# THIS TEST FAILS
+	return False
 	data='HI there0x00000002210x0000000120x0000000130x000000014'
 	if parse_metadata_for_dir(data)==({'checksum': '21', 'cpk': '2', 'edit_number': '3'}, '4'):
 		return True
@@ -537,10 +571,19 @@ def test_path_parent():
 
 # contents is a string
 def verify_checksum(metadata_map, contents):
-	return crypt.asym_dec(metadata_map["cpk"], metadata_map["checksum"]) == crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
+	hashed = crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
+	print "***verify_checksum hashed***", hashed
+	print "***verify_checksum cpk***", metadata_map["cpk"]
+	print "***verify_checksum checksum ***", metadata_map["checksum"]
+	return crypt.asym_dec(metadata_map["cpk"], metadata_map["checksum"]) == hashed
 
 def create_checksum(metadata_map, contents, csk):
 	hashed = crypt.hash(contents + metadata_map["cpk"] + metadata_map["edit_number"])
+	print "***create_checksum hashed***", hashed
+	print "***create_checksum csk***", csk
+	print "***create_checksum cpk***", metadata_map["cpk"]
+	print "***create_checksum checksum***", crypt.asym_enc(csk, hashed)
+	crypt.asym_dec(metadata_map["cpk"], crypt.asym_enc(csk, hashed)[1])
 	return crypt.asym_enc(csk, hashed)
 
 def test_verify_and_create_checksum():
@@ -590,15 +633,16 @@ def api_create_user(user, passw):	# LEO
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), crypt.det(client.user), '/')[1]
 	filepassw=randomword(40)
 	client.keys['/'+crypt.det(user)]=(new_read_key,new_write_key)
-	store = json.dumps((crypt.det(client.user), new_read_key, new_write_key))
-	my_new_perm  = ("/" + client.encUser, crypt.asym_enc(user_pk,store)[1])
-	new_log=difflog.diff_log(secret[-1],filepassw)
+	store = json.dumps(("/" + crypt.det(client.user), new_read_key, new_write_key))
+	my_new_perm  = (client.encUser, crypt.asym_enc(user_pk,store)[1])
+	new_log=difflog.diff_log(secret[1],filepassw)
 	new_log.update_perm([],[my_new_perm])
-	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))[1]
+	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))[1]
 
-	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
-	checksum=create_checksum(meta,'',secret[-1])[1]
-	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')[1]
+	meta={'edit_number':'0','cpk':secret[-1],'checksum':''}
+	checksum=create_checksum(meta,'',secret[1])[1]
+	print "******************\n***************\n*****************\n**************", checksum
+	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')[1]
 	
 	resp = send_to_server({
 		"ENC_USER": crypt.det(user),
@@ -723,6 +767,13 @@ def test_api_fopen():
 	pass
 	assert not api_fopen("/leo/leo", "r")
 
+def strip_meta(key):
+	key_list = key.split('/')
+	if key_list[-1].startswith('.meta_'):
+		key_list[-1] = key_list[-1][len('.meta_'):]
+	key = string.join(key_list, '/')
+	return key
+
 # mode = "r|w"
 def api_fopen(path, mode):	
 	if not client.loggedIn:
@@ -741,7 +792,7 @@ def api_fopen(path, mode):
 	print "FOPEN:", enc_path
 	print "FOPEN:", client.keys
 
-	if enc_path is None or enc_path not in client.keys:
+	if enc_path is None or strip_meta(enc_path) not in client.keys:
 		update_keys()
 		#enc_path = encrypt_path(path)
 		enc_path = path	#TODO: swap these two lines
@@ -751,7 +802,7 @@ def api_fopen(path, mode):
 		print "FOPEN:", enc_path
 		print "FOPEN:", client.keys
 		
-		if enc_path is None or enc_path not in client.keys:
+		if enc_path is None or strip_meta(enc_path) not in client.keys:
 			if mode == "r":
 				print "file does not exist, can't fopen with read mode"
 				return False
@@ -773,8 +824,9 @@ def api_fopen(path, mode):
 	if resp is None:
 		print "downloadFile (actual file) failure"
 		return False
-		
+	
 	data = crypt.sym_dec(client.keys[enc_path][0], resp["DATA"])
+	print "DATA****************************", data
 	parsed = parse_metadata_and_contents_for_file(data)
 	if parsed is None:
 		print "parse metadata failed"
@@ -906,7 +958,7 @@ def api_fflush_helper(handle, attempt_num):	#LEO???
 	checksum=client.open_files[handle][METADATA]['checksum']
 	edit_number=client.open_files[handle][METADATA]['edit_number']
 	cpk=client=client.open_files[handle][METADATA]['cpk']
-	data=WATERMARK+hex_string(checksum)+checksum+hex_string(edit_number)+edit_number+hex_string(cpk)+cpk+hex_string(contents)+contents
+	data=crypt.watermark()+hex_string(checksum)+checksum+hex_string(edit_number)+edit_number+hex_string(cpk)+cpk+hex_string(contents)+contents
 	enc_data=crypt.sym_enc(client.keys[client.open_files[handle][ENC_PATH]][0],data)
 	
 	#creating new diff on log
@@ -918,7 +970,7 @@ def api_fflush_helper(handle, attempt_num):	#LEO???
 	update_log_file.write(pickled)
 	update_log_file.close()
 	
-	newlog=WATERMARK+hex_string(pickled)+pickled
+	newlog=crypt.watermark()+hex_string(pickled)+pickled
 	enc_log_data=crypt.sym_enc(client.keys[client.open_files[handle][ENC_PATH]][1],newlog)
 	
 	
@@ -943,8 +995,9 @@ def test_api_fflush_helper():
 	client.loggedIn=True
 	client.keys={}
 	client.encUser='sally'
-	
-	WATERMARK='hey there!'
+
+	# THIS TEST FAILS
+	return False
 	disk_place='testdifflog'
 	otherfile='testfile'
 	m=open(otherfile,'w+')
@@ -965,7 +1018,7 @@ def test_api_fflush_helper():
 	testdif.update_perm(['hi'],['bye'])
 	store=pickle.dumps(testdif)
 	store_len=hex_string(store)
-	pickledtestdif=WATERMARK+store_len+store
+	pickledtestdif=crypt.watermark()+store_len+store
 	testing=open(disk_place,'w')
 	testing.write(pickledtestdif)
 	testing.close()
@@ -1042,11 +1095,11 @@ def api_mkdir(parent, new_dir_name):
 	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
 	new_log=difflog.diff_log(secret[-1],filepassw)
 	new_log.update_perm([],[my_new_perm])
-	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
 
 	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
 	checksum=create_checkSum(meta,'',secret[-1])
-	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
+	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
 	create_msg={"ENC_USER":client.encUser, "OP":"mkDir", "PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
 	if send_to_server(create_msg)==None:
 		return (0,'could not create file')
@@ -1115,7 +1168,7 @@ def api_rm(filename,parent_path=client.working_dir):
 	filepassw=diff_obj.password
 	if api_set_permissions(sanitize_path(meta_path(path)), meta, [], [],True)==False:
 		return (0,'could not set permissions')
-	message={"ENC_USER":client.encUser, "OP":"Delete", "PARENT_SECRET":old_filepassw,"PARENT_LOG_DATA":new_filepassw}
+	message={"ENC_USER":client.encUser, "OP":"Delete", "PARENT_SECRET":old_filepassw}
 	if send_to_server(message)==None:
 		return False
 	return True
@@ -1189,7 +1242,7 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 	diff_obj.update_secrets(new_csk,new_filepassw)
 	pickled_diff=pickle.dumps(diff_obj)
 	
-	new_log=WATERMARK+hex_string(pickled_diff)+pickled_diff
+	new_log=crypt.watermark()+hex_string(pickled_diff)+pickled_diff
 	new_log_file=new_log#crypt.sym_enc(client.keys[client.open_files[handle][ENC_PATH]][1],new_log)[1]
 	
 	newdiff=open(client.open_files[handle][LOG_PATH_ON_DISK],'w')
@@ -1202,7 +1255,9 @@ def write_permissions_and_secrets(handle,new_permissions,new_filepassw,new_csk,o
 def test_read_and_write_to_log():
 
 	client.keys={}
-	WATERMARK='hey there!'
+	#THIS DOESNT WORK ANYMORE
+	return False
+	#crypt.watermark()='hey there!'
 	disk_place='testdifflog'
 	otherfile='testfile'
 	m=open(otherfile,'w+')
@@ -1219,7 +1274,7 @@ def test_read_and_write_to_log():
 	testdif.update_perm(['hi'],['bye'])
 	store=pickle.dumps(testdif)
 	store_len=hex_string(store)
-	pickledtestdif=str(WATERMARK+store_len+store)
+	pickledtestdif=str(crypt.watermark()+store_len+store)
 	testing=open(disk_place,'w')
 	testing.write(pickledtestdif)
 	testing.close()
@@ -1248,7 +1303,9 @@ def update_checksum(handle,csk):
 		return False
 	
 def test_update_checksum():
-	WATERMARK='HI there'
+	#crypt.watermark()='HI there'
+	#THIS FAILS
+	return False
 
 	testing=open('testing','w+')
 	csk=crypt.create_asym_key_pair()[-1]
@@ -1370,7 +1427,9 @@ def test_set_perms():
 	client.keys={}
 	client.encUser='sally'
 
-	WATERMARK='hey there!'
+	#crypt.watermark()='hey there!'
+	#this fails
+	return False
 	disk_place='testdifflog'
 	otherfile='testfile'
 	m=open(otherfile,'w+')
@@ -1389,7 +1448,7 @@ def test_set_perms():
 	testdif.update_perm(['hi'],['bye'])
 	store=pickle.dumps(testdif)
 	store_len=hex_string(store)
-	pickledtestdif=WATERMARK+store_len+store
+	pickledtestdif=crypt.watermark()+store_len+store
 	testing=open(disk_place,'w')
 	testing.write(pickledtestdif)
 	testing.close()
@@ -1475,11 +1534,11 @@ def api_create_file(path):
 	my_new_perm  = (client.encUser, crypt.sym_enc(client.public_keys[client.encUser],store))
 	new_log=difflog.diff_log(secret[-1],filepassw)
 	new_log.update_perm([],[my_new_perm])
-	enc_log=crypt.sym_enc(new_write_key, WATERMARK+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
+	enc_log=crypt.sym_enc(new_write_key, crypt.watermark()+hex_string(pickle.dumps(new_log))+pickle.dumps(new_log))
 
 	meta={'edit_number':'0','cpk':secret[1],'checksum':''}
 	checksum=create_checkSum(meta,'',secret[-1])
-	data=crypt.sym_enc(new_read_key, WATERMARK+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
+	data=crypt.sym_enc(new_read_key, crypt.watermark()+hex_string(checksum)+checksum+hex_string(meta['cpk'])+meta['cpk']+hex_string(meta['edit_number'])+meta['edit_number']+'0x00000000')
 	create_msg={"ENC_USER":client.encUser, "OP":"createFile", "PARENT_SECRET":file_secret,"SECRET":filepassw,"LOG_DATA":enc_log,"DATA":data}
 	if send_to_server(create_msg)==None:
 		return (0,'could not create file')
