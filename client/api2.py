@@ -77,7 +77,7 @@ def reset_client_vars():
 	client.passw = None
 	client.working_dir = None
 	client.secrets = {}
-	client.loggedIn = True	#TODO: change loggedin to false
+	client.loggedIn = False
 	client.keys = client.DirKey()
 	client.path_key = client.DirKey()
 	client.enc_path_key = client.DirKey()
@@ -116,7 +116,7 @@ def send_to_server(msg_obj):
 		print "--------------------"
 		client.err_msgs += "exception when sending " + json.dumps(msg_obj) + "\n"
 		client.err_msgs += str(e)
-		api_logout()
+		clear_state()
 		return None
 		
 	if resp["STATUS"] != 0:
@@ -616,7 +616,7 @@ def api_get_err_log():
 	return client.err_msgs
 
 def api_create_user(user, passw):	# LEO
-	api_logout()
+	clear_state()
 
 	if not valid_user_pass(user, passw):
 		return False
@@ -670,7 +670,9 @@ def api_create_user(user, passw):	# LEO
 	success = write_secrets()
 	if not success:
 		return False
-	api_logout()
+	
+	login_helper(user, passw, None, True)
+	
 	return True
 	
 def test_api_create_user():
@@ -681,22 +683,19 @@ def test_api_create_user():
 	assert api_create_user("leo", "123456")
 	assert api_create_user("leo", "123456") == False
 	TESTING_ALLOW_RECREATE_USER = True
-	api_logout()
+	clear_state()
 	assert api_login("leo", "bad password") == False
 	assert api_login("leo", "123456")
 
 def api_login(user, passw, secretsFile=None):	# LEO
-	api_logout()
-	if api_login_helper(user, passw, secretsFile):
+	clear_state()
+	if login_helper(user, passw, secretsFile, False):
 		return True
 	else:
-		api_logout()
+		clear_state()
 		return False
 
-def api_login_helper(user, passw, secretsFile):	# LEO		
-	if not valid_user_pass(user, passw):
-		return False
-
+def login_helper(user, passw, secretsFile, alreadyConnected):	# LEO		
 	client.user = user
 	client.encUser = crypt.det(user)
 	client.working_dir = "/" + client.user
@@ -713,16 +712,17 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 	success = load_secrets()
 	if not success:
 		return False
-	success = setup_socket()
-	if not success:
-		return False
-	
-	resp = send_to_server({
-		"ENC_USER": client.encUser,
-		"OP": "loginUser",
-		"PASSWORD": client.passw})
-	if resp is None:
-		return False
+
+	if not alreadyConnected:
+		success = setup_socket()
+		if not success:
+			return False
+		resp = send_to_server({
+			"ENC_USER": client.encUser,
+			"OP": "loginUser",
+			"PASSWORD": client.passw})
+		if resp is None:
+			return False
 
 	resp = send_to_server({
 		"ENC_USER": client.encUser,
@@ -749,8 +749,11 @@ def api_login_helper(user, passw, secretsFile):	# LEO
 def test_api_login():
 	assert api_login("leo", "123456")
 
-def api_logout(keepfiles=False):	# logout
-		
+def api_logout(keepfiles=False):
+	send_to_server({'OP': "logoutUser", "ENC_USER": client.encUser})
+	clear_state(keepfiles)
+
+def clear_state(keepfiles=False):
 	for handle in client.open_files.keys():
 		try:
 			handle.close()
