@@ -1,4 +1,5 @@
 import os
+from subprocess import call
 import cmd
 import sys
 
@@ -16,19 +17,12 @@ class LoginClient(cmd.Cmd):
 	intro = "Welcome to the filesystem.  Type 'help' at any time to see a list of commands"
 	prompt = "Enter 'login [username] [password]' to login or 'register [username] [password]' to create an account: "
 
-	def do_auto(self, arg):
-		username = "asaj"
-		fclient = FileClient()
-		fclient.set_username(username)
-		fclient.cmdloop()
-
 	def do_login(self, arg):
 		(username, password) = parse(arg)
 		if api_login(username, password):
 			fclient = FileClient()
 			fclient.set_username(username)
 			fclient.cmdloop()
-			print "logged out"
 		else:
 			print "Username and password did not match"
 				
@@ -38,10 +32,9 @@ class LoginClient(cmd.Cmd):
 			fclient = FileClient()
 			fclient.set_username(username)
 			fclient.cmdloop()
-			print "logged out"
 		else:
 			print "Registration failed"
-		
+	
 class FileClient(cmd.Cmd):
 	intro = "Welcome to the filesystem.  Type 'help' at any time to see a list of commands"
 
@@ -50,15 +43,15 @@ class FileClient(cmd.Cmd):
 		self.username = username
 		self.prompt = "file-server:" + self.current_dir + " " + self.username + "$ "
 		self.help_message = {"logout":"",\
-												"ls":"[path]"\
-												"cd":"[path]"\
-												"touch":"[file]"\
-												"rm":"[file]"\
-												"mv":"[path][path]"\
-												"mkdir":"[path]"\
-												"vim":"[file]"\
-												"emacs":"[file]"\
-												"share":"[user][file]"\
+												"ls":"[path]",\
+												"cd":"[path]",\
+												"touch":"[file]",\
+												"rm":"[file]",\
+												"mv":"[path][path]",\
+												"mkdir":"[path]",\
+												"vim":"[file]",\
+												"emacs":"[file]",\
+												"share":"[user][file]",\
 												"logout":""}
 
 
@@ -73,31 +66,44 @@ class FileClient(cmd.Cmd):
 	def do_ls(self, arg):
 		args = parse(arg)
 		if len(args) == 0:
-			print api_list_dir(current_dir)
+			dir_contents = api_list_dir(self.current_dir)
 		elif len(args) == 1:
-			print api_list_dir(get_absolute_path(current_dir, args[0]))
-	
+			path = get_absolute_path(self.current_dir, args[0])
+			if api_path_exists(path):
+				dir_contents = api_list_dir(path)
+			else:
+				print "No such file or directory"
+		ret = ""
+		for  in dir_contents:
+			ret = ret + name + '\t'
+		print ret
+			
 	def do_cd(self, arg):
 		args = parse(arg)
 		if len(args) == 0:
 			self.current_dir = "/" + username
-		elif len(args) == 2:
-			self.current_dir = get_absolute_path(current_dir, command[1])	
+		elif len(args) == 1:
+			path = get_absolute_path(self.current_dir, args[0])
+			if api_path_exists(path):
+				self.current_dir = get_absolute_path(self.current_dir, args[0])
+			else:
+				print "No such file or directory"
+		self.prompt = "file-server:" + self.current_dir + " " + self.username + "$ "
 
 	def do_touch(self, arg):
 		args = parse(arg)
 		if len(args) == 1:
-			api_create_file(get_absolute_path(current_dir, args[1]))
+			api_create_file(get_absolute_path(self.current_dir, args[0]))
 		else:
 			print "Error"
 	
 	def do_rm(self, arg):
 		args = parse(arg)
 		if len(args) == 1:
-			api_rm(get_parent_directory(get_absolute_path(current_dir, args[0])), get_absolute_path(current_dir, args[0]).split('/')[-1])
+			api_rm(get_parent_directory(get_absolute_path(self.current_dir, args[0])), get_absolute_path(self.current_dir, args[0]).split('/')[-1])
 		else:
 			print "Error"
-
+	
 	def do_mv(self, arg):
 		args = parse(arg)
 		if len(args) == 2:
@@ -108,31 +114,31 @@ class FileClient(cmd.Cmd):
 	def do_mkdir(self, arg):
 		args = parse(arg)
 		if len(args) == 1:
-			api_mkdir(get_parent_directory(get_absolute_path(current_dir, args[0])), get_absolute_path(current_dir, args[0]).split('/')[-1])
+			api_mkdir("/" + get_absolute_path(self.current_dir, args[0]))
 		else:
 			print "Error"
 	
 	def do_vim(self, arg):
 		args = parse(arg)
-		import sys, os
-		from subprocess import call
+		if len(args) == 1:
+			EDITOR = os.environ.get('EDITOR','vim') #that easy!
+			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'r')
+			contents = api_fread(handle)
 
-		EDITOR = os.environ.get('EDITOR','vim') #that easy!
+			tempfile = open('.temp.'+args[0],'w')
+			tempfile.write(contents)
+			tempfile.flush()
+			call([EDITOR, tempfile.name])
+			tempfile.flush()
+			tempfile.close()
+			tempfile = open('.temp.'+split_path(args[0])[1],'r')
+			new_contents = tempfile.read()
+			handle = api_fopen(get_absolute_path(self.current_dir, args[0]),'w')
+			api_fwrite(handle, new_contents)
+			api_fflush(handle)
+			api_fclose(handle)
 
-		initial_message = "contents" # if you want to set up the file somehow
-
-		tempfile=open('temp','w')
-		tempfile.write(initial_message)
-		tempfile.flush()
-		call([EDITOR, tempfile.name])
   
-
-
-m=temp
-print "yes"
-print m
-		pass
-	
 	def do_emacs(self, arg):
 		args = parse(arg)
 		pass
@@ -143,7 +149,6 @@ print m
 
 	def do_logout(self, arg):
 		api_logout()
-		print "Logged out"
 		return True
 		
 def start_new_client():

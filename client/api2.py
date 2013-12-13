@@ -850,6 +850,10 @@ def api_rm(path):
 			break
 	if check == True:
 		return (0,'file cannot be removed because it is open')
+
+	# If a dir, make sure it's empty
+	if not api_list_dir(path)[0]:
+		return False
 	print client.loggedIn
 	api_fread(meta)
 	api_fwrite(meta,'\nrm '+filename+'\n')
