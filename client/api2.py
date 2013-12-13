@@ -213,24 +213,16 @@ def update_keys():
 	enc_path_list = [i.split('/')[1:] for i in enc_path_list]
 	enc_path_list = sorted(enc_path_list, key = lambda x: len(x))	
 	
-	print enc_path_list, "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-	
 	for enc_path in enc_path_list:
 		path = []
 		full_enc_path = '/' + string.join(enc_path, '/')
-		print "full_enc_path", full_enc_path
-		print "enc_path", enc_path
 		if len(enc_path) == 1:
-			print "111111111111111", enc_path[0]
 			path.append(enc_path[0])
 		elif len(enc_path) == 2:
-			print "222222222222222", (enc_path[0], crypt.sym_dec(client.keys[full_enc_path][0],enc_path[1]))
 			path.append(enc_path[0])
-			print "DECRYPT USING KEY: ", client.keys[full_enc_path][0], " ON VALUE: ", enc_path[1]
 			name = crypt.sym_dec(client.keys[full_enc_path][0],enc_path[1])
 			path.append(name)
 		else:
-			print "333333333333333"
 			path.append(client.enc_path_key["/" + string.join(enc_path[:-1],'/')])
 			name = crypt.sym_dec(client.keys[full_enc_path][0], enc_path[-1])
 			path.append(name)
@@ -337,7 +329,7 @@ def verify_checksum(metadata_map, contents, printing=False):
 	plaintext = contents + metadata_map["cpk"] + metadata_map["edit_number"]
 	signature = metadata_map["checksum"]
 	public_key = metadata_map["cpk"]
-	if printing:
+	if False:
 		print "verify ***************\n***************\n******************\n**************"
 		print (public_key, plaintext, signature)
 	return crypt.verify_dig_sig(public_key, plaintext, signature)
@@ -349,7 +341,7 @@ def verify_checksum(metadata_map, contents, printing=False):
 def create_checksum(metadata_map, contents, csk, printing=False):
 	plaintext = contents + metadata_map["cpk"] + metadata_map["edit_number"]
 	(len_sig, sig) = crypt.generate_dig_sig(csk, plaintext)
-	if printing:
+	if False:
 		print "create_checksum ***************\n***************\n******************\n**************"
 		print (csk, plaintext)
 		print sig
@@ -364,16 +356,43 @@ def valid_user_pass(user, passw):
 	# allowed: alphanumeric + underscores and dashes
 	return re.match('^[\w_-]+$', user) and len(passw) >= 6
 
-def verify_file(file_handle, diff_log):
-	for i in diff_log:
-		if not verify_dig_sig(client.public_keys[client.encUser], i.patch, i.signature):
+def verify_file(handle):
+	diff=open(client.open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff=diff.read()
+	diff.close()
+	diff_obj=parse_log(dec_diff)
+	for i in diff_obj:
+		if not crypt.verify_dig_sig(client.public_keys[client.encUser], i.patch, i.signature):
+			print "digital signature verify failed"
 			return False
-	api_fseek(file_handle,0,0)
-	if not verify_checksum(client_openfiles[file_handle][METADATA], api_fread(file_handle)):
+			
+	api_fseek(handle,0,0)
+	if not verify_checksum(client.open_files[handle][METADATA], api_fread(handle)):
+		print "verify checksum failed"
 		return False
-	if not client_openfiles[file_handle][METADATA]["edit_number"] == diff_log[-1].edit_number:
+		
+	diff_edit_num = int(diff_obj[-1].edit_number)
+	file_edit_num = int(client.open_files[handle][METADATA]["edit_number"])
+	if not diff_edit_num == file_edit_num:
+		print "edit number check failed"
 		return False
+		
 	return True
+
+def rebuild_file(handle, all_states = False):
+	diff=open(client.open_files[handle][LOG_PATH_ON_DISK],'r')
+	dec_diff=diff.read()
+	diff.close()
+	diff_obj=parse_log(dec_diff)
+	
+	if all_states == True:
+		for i in range(len(diff_obj)):
+			print "diff patch", diff_obj[i].patch
+			
+		for i in range(len(diff_obj)):
+			print " diff state %d: %s" % (i, diff_obj.rebuild_file(i))
+	print "final diff state:", diff_obj.rebuild_file()
+	
 
 #~~~~~~~~~~~~~~~~~~~~~~~ API functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -596,7 +615,7 @@ def api_fopen(path, mode):
 		if mode == "r":
 			handle = open(contents_path_on_disk, "r")
 		else: #mode == "w"
-			handle = open(contents_path_on_disk, "a+")
+			handle = open(contents_path_on_disk, "r+")
 	except:
 		traceback.print_exc()
 		return False
@@ -687,7 +706,15 @@ def api_fflush_helper(handle, attempt_num):
 	enc_data=crypt.sym_enc(client.keys[client.open_files[handle][ENC_PATH]][0],data)
 	
 	#creating new diff on log
-	diff_obj.create_diff(client.user,client.secrets["user_sk"],client.open_files[handle][PATH_TO_OLD_FILE],client.open_files[handle][CONTENTS_PATH_ON_DISK]) #NO comments for right now
+	old_file = open(client.open_files[handle][PATH_TO_OLD_FILE],'r')
+	old_contents = old_file.read()
+	print "###############################################"
+	print "old file path:", client.open_files[handle][PATH_TO_OLD_FILE]
+	print "old file contents:", old_contents
+	print "new_file path", client.open_files[handle][CONTENTS_PATH_ON_DISK]
+	print "new_file contents:", contents
+	
+	diff_obj.create_diff(client.user,client.secrets["user_sk"],old_contents,contents)
 	client.secrets[client.open_files[handle][CONTENTS_PATH_ON_DISK]]=client.open_files[handle][METADATA]['edit_number'] #updates last edit_number per user
 	pickled=pickle.dumps(diff_obj)
 	#updating log file on local disk
@@ -723,7 +750,6 @@ def api_fclose(handle):	# fclose
 		if api_fflush(handle)==0:
 			return (0,'couldnt flush')
 	del client.open_files[handle]
-	print 'FCLOSE----------------'
 	print client.loggedIn
 	return handle.close()
 
@@ -860,7 +886,7 @@ def api_rm(path):
 			break
 	if check == True:
 		return (0,'file cannot be removed because it is open')
-		
+
 	handle = api_fopen(path, "w")
 		
 	api_fread(meta)
@@ -1059,13 +1085,7 @@ def api_set_permissions(handle, new_readers_list, new_writers_list, delete_my_pe
 		"NEW_SECRET":new_filepassw,"SECRET":old_filepassw,"PATH":enc_path, "NEW_PATH":new_path}
 	if send_to_server(change_secret)==None:
 		return (0,'changing the secret')
-		
-	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-	print old_permissions
-	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-	print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-	
+			
 	removed_perms={"ENC_USER":client.encUser,
 		"OP":"deletePermissions",
 		"USERS_AND_PERMS":old_permissions,
@@ -1138,13 +1158,7 @@ def api_create_file(path):
 	#create read and write key
 	new_read_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
 	new_write_key=crypt.create_sym_key(crypt.hash(client.passw), path_filename, directory)[1]
-	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]
-	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-	print "path: ", path, "new_read_key: ", new_read_key, "path_filename: ", path_filename
-	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-	print "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-	
+	enc_filename=crypt.sym_enc(new_read_key, path_filename)[1]	
 	
 	enc_path = encrypt_path(directory) + "/" + enc_filename
 	client.keys[enc_path]=(new_read_key,new_write_key)

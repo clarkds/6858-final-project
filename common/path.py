@@ -25,7 +25,7 @@ def get_absolute_path(current_dir, path):
 	if path[0] == '/':
 		return get_absolute_path('/', path[1:])
 	else:
-		return resolve_path(current_dir + path)
+		return resolve_path(current_dir + '/' + path)
 		
 def get_parent_directory(path):
 	sub_path = path.split('/')

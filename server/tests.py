@@ -19,9 +19,10 @@ s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 def create_user_test():
 	s0.connect((SERVER_IP, SERVER_PORT))
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"createUser", "PASSWORD":"test", "KEY":"55555", "SECRET":"00000", "LOG_DATA":"Added asaj folder", "META_DATA":"Added asaj folder"})["STATUS"] == 0
-	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getPublicKey", "TARGET":"asaj"})["KEY"] == "55555"
+	assert client_send(s0, {"ENC_USER":"asaj", "OP":"getAllPublicKeys"}) == ["asaj", "55555"]
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.meta_asaj"})["DATA"] == "Added asaj folder"
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"downloadFile", "PATH":"/.log_asaj"})["DATA"] == "Added asaj folder"
+	
 
 	# Update meta for /asaj in preperation for making /asaj/test
 	assert client_send(s0, {"ENC_USER":"asaj", "OP":"writeFile", "PATH":"/.meta_asaj", "SECRET":"00000", "FILE_DATA":"Adding test folder", "LOG_DATA":"Added test dir"})["STATUS"] == 0

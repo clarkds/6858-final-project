@@ -55,10 +55,8 @@ def readMsg(s):
 def client_send(s, msg_obj):
 	# TODO: socket should come from a pool of sockets
 	# TODO: add a timeout, try/catch
-	print "Sent: " + str(msg_obj)
 	s.send(msgFromObj(msg_obj))
 	(msg_size, msg_obj) = readMsg(s)
-	print "Received: " + str(msg_obj)
 	return msg_obj
 	
 def create_client_socket(server_ip, server_port, timeoutSeconds):

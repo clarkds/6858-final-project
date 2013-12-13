@@ -42,7 +42,7 @@ class diff_log(list):
     def create_diff(self, user, user_SK, orig_file, mod_file = None, comments = None):
         new_diff = diff_obj()
         new_diff.user = user
-        new_diff.edit_number = list.__len__(self)
+        new_diff.edit_number = list.__len__(self) + 1
         new_diff.comments = comments
         if mod_file == None:
             new_diff.patch = self._generate_patch('', orig_file)
