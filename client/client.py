@@ -213,6 +213,7 @@ def run_editor(which, arg, current_dir, help_message):
 			api_fwrite(handle, new_contents)
 			api_fflush(handle)
 			api_fclose(handle)
+			tempfile.close()
 			os.remove(temp_filename)
 		except:
 			print "No such file or directory"
